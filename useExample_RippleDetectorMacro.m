@@ -10,8 +10,9 @@ macroMontageNames = {'MM488','MM487','MM489','MM486','MM499','MM485','MM490','MM
 %channels on which detections will be performed (just an example)
 channelsPerPatient = {[2 23], [9 17 32 61], [2 8 29 37],[9],[39 23 47],[53],[],[],[],[47 48]};
 
-%probe chan is required for up vs down comparison
-probeChans = [78, 16, 1, 46, 46, 8, nan, 1, 32, 9, 1,9,9];
+%for bipolar ripple detection - in every row the first index is the channel in which ripple
+%detection is required and the second is the reference channel
+biPolarCouplesPerPatient = {[],[],[],[],[],[],[],[],[32 35; 33 35; 39 42; 40 42; 47 50; 48 50; ],[],[2 4],[9 12; 39 42; 40 42; 65 67; 66 67],[]};
 
 %building the run data, not that for all file names of detections the
 %methods assume the name is <provided name according to runData><channel
@@ -21,20 +22,10 @@ runData = [];
 nPatients = length(patients);
 for iPatient = 1:nPatients 
     runData(iPatient).patientName = patients{iPatient};
-    %the probe channel is required only for the up vs down comparison (can
-    %be left empty otherwise)
-    runData(iPatient).probeChan = probeChans(iPatient);
     %The folder where the raw data is stored - you will need to change it
     runData(iPatient).DataFolder = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MACRO'];
-    %The folder+filename into which the staresina sw detections results is going to be stored or is
-    %already stored if the sw detection was already run (the folder should
-    %exist)
-    runData(iPatient).SWStaresinaFileName = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MACRO\SWStaresinaResults\SWStaresina'];
-    %The folder+filename into which the staresina spindle detections
-    %results is going to be stored (the folder should exist)
-    runData(iPatient).SpindlesStaresinaFileNames = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MACRO\spindleStaresinaResults\spindleTimes'];
-    %The folder+filename from which spindles are going to be loaded (should be the same
-    %as the line above if the detections are first run and saved into SpindlesStaresinaFileNames
+       
+    %The folder+filename from which spindles are going to be loaded
     runData(iPatient).SpindlesFileNames = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MACRO\spindleStaresinaResults\spindleTimes'];
     %The folder+filename into which the bipolar ripples detections results is going
     %to be stored
@@ -57,15 +48,53 @@ for iPatient = 1:nPatients
     runData(iPatient).sleepScoringFileName = ['D:\data_p\SleepScore_v1\',sleepScoreFileName{iPatient},'.mat'];    
     %channels that the ripples analyses will be performed on
     runData(iPatient).channelsToRunOn = channelsPerPatient{iPatient};   
-    
     %macromontage file name per patient
     runData(iPatient).macroMontageFileName = ['C:\Users\user\google drive\MayaProject\badChans\newMontages\',macroMontageNames{iPatient},'.mat'];
+    %The micro montage filename is required for micro channels analysis
+    %which is not performed in this example
 %     runData(iPatient).microMontageFileName = ['C:\Users\user\google drive\MayaProject\montages\',patients{iPatient},'\',expNames{iPatient},'\montage.mat'];
     %name of file with single units info
     runData(iPatient).spikeData = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\averagedRef\',patients{iPatient},'_spike_timestamps_post_processing.mat'];
 end
 
+%% an example for saving ripples using the wrapper AnalyzeCoupling.saveDetectionResults
+
+ac = AnalyzeCoupling;
+
+%setting which detections to run - in this example, bipolar ripples will be
+%detected for channelsToRunOn per patient
+whatToRun.runSpikes = false;
+whatToRun.runRipples = false;
+whatToRun.runRipplesBiPolar = true;
+whatToRun.runSpindles = false;
+whatToRun.runSpindlesStaresina = false;
+whatToRun.runSWStaresina = false;
+whatToRun.runSWMaingret = false;
+
+%saving detections (in this example, bipolar ripples detection)
+ac.saveDetectionResults(runData, whatToRun);
+
+%% an example for detecting ripples directly using RippleDetector (it's the same thing the wrapper does inside)
 rd = RippleDetector;
+
+%an example of using the ripple detection directly and not with the wrapper
+%(on the first channel of the first patient for this example)
+currChan = runData(iPatient).channelsToRunOn(1);
+
+%loading - sleep scoring, IIS, data
+sleepScoring = load(runData(1).sleepScoringFileName);
+sleepScoring = sleepScoring.sleep_score_vec;
+peakTimes = load([runData(iPatient).SpikesFileNames,num2str(currChan),'.mat']);
+peakTimes = peakTimes.peakTimes;
+currData = load([runData(iPatient).DataFolder,'\CSC',num2str(currChan),'.mat']);
+currData = currData.data;
+%detecting the ripples
+[ripplesTimes, ripplesStartEnd] = rd.detectRipple(currData, sleepScoring, peakTimes);
+%plotting the single ripples and saving the figures
+rd.plotRipples(currData,ripplesTimes,'D:\singleRipples');
+
+%% ripple related analyses
+
 %runs the "ripple overview" analysis for the channels specified in
 %channelsToRunOn
 resultsData = rd.runRippleData(runData,'D:\results\resultsRipplesDataNew.mat');
