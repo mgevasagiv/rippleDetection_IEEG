@@ -1316,7 +1316,7 @@ classdef RippleDetector < handle
                         ripplesStartEnd = {};
                     end
                     
-                    [rippleTimesMerged,rippleStartEndMerged] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimes, ripplesStartEnd)
+                    [rippleTimesMerged,rippleStartEndMerged] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimes, ripplesStartEnd);
                     
                     ripplesTimes = rippleTimesMerged;
                     ripplesStartEnd = rippleStartEndMerged;
@@ -1341,7 +1341,12 @@ classdef RippleDetector < handle
                     ripplesDuringStimInds = ismember(ripplesTimes,find(ripplesIndsLog & stimInds));
                     
                     %find all units in spike data recorded in area
-                    unitInds = find(strcmp(extractfield(spikeData.micro_channels_spike_summary.unit_list_xls,'Location'),currArea));
+                    unitInds = [];
+                    for ii_u = 1:length(spikeData.micro_channels_spike_summary.unit_list_xls)
+                        if strcmp(getfield(spikeData.micro_channels_spike_summary.unit_list_xls(ii_u),'Location'),currArea)
+                            unitInds = [unitInds, ii_u];
+                        end
+                    end
                     
                     if obj.spikeMultiUnits
                         currChannels = [spikeData.micro_channels_spike_summary.unit_list_xls(unitInds).Channel];
@@ -1409,58 +1414,9 @@ classdef RippleDetector < handle
                     [fireRateRipAvgUnitsBefore, fireRateControlAvgUnitsBefore] = obj.checkSpikeRateAtRip(ripplesTimes(ripplesBeforeStimInds), ripplesStartEnd(ripplesBeforeStimInds,:), spikeTimes);
                     [fireRateRipAvgUnitsStim, fireRateControlAvgUnitsStim] = obj.checkSpikeRateAtRip(ripplesTimes(ripplesDuringStimInds), ripplesStartEnd(ripplesDuringStimInds,:), spikeTimes);
                     
-                    %
-                    %                     ripplesTimesBefore = ripplesTimes(ripplesBeforeStimInds);
-                    %                     nRipplesBefore = length(ripplesTimesBefore);
-                    %
-                    %                     ripplesTimesStim = ripplesTimes(ripplesDuringStimInds);
-                    %                     nRipplesStim = length(ripplesTimesStim);
-                    
-                    %calculate average of ripples
-                    %                     avgBefore = zeros(nRipplesBefore,length([-avgRippleBeforeAfter:avgRippleBeforeAfter]));
-                    %                     avgStim = zeros(nRipplesStim,length([-avgRippleBeforeAfter:avgRippleBeforeAfter]));
-                    %
-                    %                     for iRipple = 1:nRipplesBefore
-                    %                         avgBefore(iRipple,:) = data(ripplesTimesBefore(iRipple)-avgRippleBeforeAfter:ripplesTimesBefore(iRipple)+avgRippleBeforeAfter);
-                    %                     end
-                    %                     avgBefore = nanmean(avgBefore);
-                    %
-                    %                     for iRipple = 1:nRipplesStim
-                    %                         avgStim(iRipple,:) = data(ripplesTimesStim(iRipple)-avgRippleBeforeAfter:ripplesTimesStim(iRipple)+avgRippleBeforeAfter);
-                    %                     end
-                    %                     avgStim = nanmean(avgStim);
-                    %                     specStim = ft_specest_mtmfft(avgStim,[1:length(avgStim)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
-                    %                     specStim = abs(squeeze(specStim(1,1,:,:)));
-                    
-                    %get ripple centered TFRs
-                    %                     pacCalc = PACCalculator;
-                    %                     pacCalc.freqRange = obj.freqRangeForAvgSpec;
-                    %                     pacCalc.timeBeforeAfterEvent = obj.timeBeforeAfterEventRipSpec; %seconds
-                    %                     pacCalc.timeForBaseline = obj.timeForBaselineRip; %seconds, from Starestina et al
-                    %                     pacCalc.minNCycles = obj.minNCycles;
-                    %
-                    %                     [meanTFRRipBefore, avgBefore] = pacCalc.plotAvgSpecDiff(data, ripplesTimesBefore);
-                    %                     [meanTFRRipStim, avgStim] = pacCalc.plotAvgSpecDiff(data, ripplesTimesStim);
-                    %
-                    %                     specBefore = ft_specest_mtmfft(avgBefore,[1:length(avgBefore)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
-                    %                     specBefore = abs(squeeze(specBefore(1,1,:,:)));
-                    %                     specStim = ft_specest_mtmfft(avgStim,[1:length(avgStim)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
-                    %                     specStim = abs(squeeze(specStim(1,1,:,:)));
-                    
-                    %                     resultsPerChan(iChan).avgBefore = avgBefore;
-                    %                     resultsPerChan(iChan).avgStim = avgStim;
-                    %                     resultsPerChan(iChan).specBefore = specBefore;
-                    %                     resultsPerChan(iChan).specStim = specStim;
-                    %                     resultsPerChan(iChan).meanTFRRipBefore = meanTFRRipBefore;
-                    %                     resultsPerChan(iChan).meanTFRRipStim = meanTFRRipStim;
-                    
                     resultsPerChan(iArea).unitInds = unitInds;
                     resultsPerChan(iArea).spikeTimes = spikeTimes;
                     
-                    resultsPerChan(iArea).ripRatesBefore = ripRatesBefore;
-                    resultsPerChan(iArea).ripRatesAvgUnitsBefore = ripRatesAvgUnitsBefore;
-                    resultsPerChan(iArea).controlRatesBefore = controlRatesBefore;
-                    resultsPerChan(iArea).controlRatesAvgUnitsBefore = controlRatesAvgUnitsBefore;
                     resultsPerChan(iArea).fireRateRipBefore = fireRateRipBefore;
                     resultsPerChan(iArea).fireRateRipAvgUnitsBefore = fireRateRipAvgUnitsBefore;
                     resultsPerChan(iArea).fireRateControlBefore = fireRateControlBefore;
@@ -1483,7 +1439,7 @@ classdef RippleDetector < handle
             end
             
             if ~isempty(fileNameResults)
-                save(fileNameResults,'results');
+                save(fileNameResults,'results','-v7.3');
             end
             
         end
@@ -1758,6 +1714,7 @@ classdef RippleDetector < handle
                     %third plot - before vs stim
                     subplot(1,3,3);
                     shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)/sqrt(nRipplesBefore),'lineprops','-g');
+
                     hold all;
                     shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)/sqrt(nRipplesStim),'lineprops','-r');
                     hold off;
