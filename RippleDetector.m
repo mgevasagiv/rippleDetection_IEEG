@@ -1559,6 +1559,7 @@ classdef RippleDetector < handle
                                     title(['Units ',num2str(results(iPatient).resultsPerChan(iChan).unitInds{currUnit}),' firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]);
                                 end
                             else
+                                nRipplesBefore = 0;
                                 resRipB = [];
                                 title('No data');
                             end
@@ -1598,6 +1599,7 @@ classdef RippleDetector < handle
                                 end
                             else
                                 resRipS = [];
+                                nRipplesStim = 0;
                                 title('No data');
                             end
                             
@@ -1650,6 +1652,7 @@ classdef RippleDetector < handle
                                 end
                             else
                                 title('No data');
+                                nStim = 0;
                             end
                             
                             if ~isempty(results(iPatient).resultsPerChan(iChan).allSessionFireRates{currUnit})
@@ -1705,6 +1708,7 @@ classdef RippleDetector < handle
                         title({['Control vs Ripple, Before, nRipples = ',num2str(nRipplesBefore)],['firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
                     else
                         title('No Data');
+                        nRipplesBefore = 0;
                     end
                     
                     %second plot - stimulation ripple vs control
@@ -1734,11 +1738,12 @@ classdef RippleDetector < handle
                         title({['Control vs Ripple, Stimulations, nRipples = ',num2str(nRipplesStim)],['firing rate ripple=',num2str(frS,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
                     else
                         title('No Data');
+                        nRipplesStim = 0;
                     end
                     
                     %third plot - before vs stim
                     subplot(1,3,3);
-                    if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)
+                    if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore) && ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)
                         shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)/sqrt(nRipplesBefore),'lineprops','-g');
                         hold all;
                         shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)/sqrt(nRipplesStim),'lineprops','-r');
