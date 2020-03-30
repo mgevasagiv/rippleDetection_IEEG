@@ -1533,121 +1533,143 @@ classdef RippleDetector < handle
                             
                             %first plot - before ripple vs control
                             subplot(nInFigure*2,4,[(iUnit-1)*8+1 (iUnit-1)*8+5]);
-                            resRipB = results(iPatient).resultsPerChan(iChan).fireRateRipBefore{currUnit};
-                            resCont = results(iPatient).resultsPerChan(iChan).fireRateControlBefore{currUnit};
-                            nRipplesBefore = size(resRipB,1);
-                            
-                            shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
-                            hold all;
-                            shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesBefore),'lineprops','-b');
-                            hold off;
-                            
-                            aucRipB = sum(resRipB(:,indsForSign),2);
-                            aucCont = sum(resCont(:,indsForSign),2);
-                            frB = mean(mean(resRipB(:,indsForSign),2));
-                            frC = mean(mean(resCont(:,indsForSign),2));
-                            
-                            [~,p] = ttest(aucRipB,aucCont,'tail','right');
-                            currylim = ylim;
-                            ymin = min(currylim(1),ymin);
-                            ymax = max(currylim(2),ymax);
-                            
-                            if iUnit ==1
-                            legend({'Ripple','Control'});
-                            end
-                            xlabel('Time (ms)');
-                            ylabel('Spike rate');
-                            if iUnit==1
-                                title({['Control vs Ripple, Before, nRipples = ',num2str(nRipplesBefore)],['Unit ',num2str(results(iPatient).resultsPerChan(iChan).unitInds{currUnit}),' firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
+                            if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipBefore{currUnit})
+                                resRipB = results(iPatient).resultsPerChan(iChan).fireRateRipBefore{currUnit};
+                                resCont = results(iPatient).resultsPerChan(iChan).fireRateControlBefore{currUnit};
+                                nRipplesBefore = size(resRipB,1);
+                                
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
+                                hold all;
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesBefore),'lineprops','-b');
+                                hold off;
+                                
+                                aucRipB = sum(resRipB(:,indsForSign),2);
+                                aucCont = sum(resCont(:,indsForSign),2);
+                                frB = mean(mean(resRipB(:,indsForSign),2));
+                                frC = mean(mean(resCont(:,indsForSign),2));
+                                
+                                [~,p] = ttest(aucRipB,aucCont,'tail','right');
+                                currylim = ylim;
+                                ymin = min(currylim(1),ymin);
+                                ymax = max(currylim(2),ymax);
+                                
+                                if iUnit ==1
+                                    legend({'Ripple','Control'});
+                                end
+                                xlabel('Time (ms)');
+                                ylabel('Spike rate');
+                                if iUnit==1
+                                    title({['Control vs Ripple, Before, nRipples = ',num2str(nRipplesBefore)],['Unit ',num2str(results(iPatient).resultsPerChan(iChan).unitInds{currUnit}),' firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
+                                else
+                                    title(['Units ',num2str(results(iPatient).resultsPerChan(iChan).unitInds{currUnit}),' firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]);
+                                end
                             else
-                                title(['Units ',num2str(results(iPatient).resultsPerChan(iChan).unitInds{currUnit}),' firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]);
+                                resRipB = [];
+                                title('No data');
                             end
                             
                             %second plot - stimulation ripple vs control
                             subplot(nInFigure*2,4,[(iUnit-1)*8+2 (iUnit-1)*8+6]);
                             
-                            resRipS = results(iPatient).resultsPerChan(iChan).fireRateRipStim{currUnit};
-                            resCont = results(iPatient).resultsPerChan(iChan).fireRateControlStim{currUnit};
-                            nRipplesStim = size(resRipS,1);
-                            
-                            shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipS), std(resRipS)/sqrt(nRipplesStim),'lineprops','-r');
-                            hold all;
-                            shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesStim),'lineprops','-b');
-                            hold off;
-                            
-                            aucRipS = sum(resRipS(:,indsForSign),2);
-                            aucCont = sum(resCont(:,indsForSign),2);
-                            frS = mean(mean(resRipS(:,indsForSign),2));
-                            frC = mean(mean(resCont(:,indsForSign),2));
-                            
-                            [~,p] = ttest(aucRipS,aucCont,'tail','right');
-                            currylim = ylim;
-                            ymin = min(currylim(1),ymin);
-                            ymax = max(currylim(2),ymax);
-                            
-                            if iUnit ==1
-                            legend({'Ripple','Control'});
-                            end
-                            xlabel('Time (ms)');
-                            ylabel('Spike rate');
-                            if iUnit==1
-                                title({['Control vs Ripple, Stimulations, nRipples = ',num2str(nRipplesStim)],['firing rate ripple=',num2str(frS,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
+                            if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipStim{currUnit})
+                                resRipS = results(iPatient).resultsPerChan(iChan).fireRateRipStim{currUnit};
+                                resCont = results(iPatient).resultsPerChan(iChan).fireRateControlStim{currUnit};
+                                nRipplesStim = size(resRipS,1);
+                                
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipS), std(resRipS)/sqrt(nRipplesStim),'lineprops','-r');
+                                hold all;
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesStim),'lineprops','-b');
+                                hold off;
+                                
+                                aucRipS = sum(resRipS(:,indsForSign),2);
+                                aucCont = sum(resCont(:,indsForSign),2);
+                                frS = mean(mean(resRipS(:,indsForSign),2));
+                                frC = mean(mean(resCont(:,indsForSign),2));
+                                
+                                [~,p] = ttest(aucRipS,aucCont,'tail','right');
+                                currylim = ylim;
+                                ymin = min(currylim(1),ymin);
+                                ymax = max(currylim(2),ymax);
+                                
+                                if iUnit ==1
+                                    legend({'Ripple','Control'});
+                                end
+                                xlabel('Time (ms)');
+                                ylabel('Spike rate');
+                                if iUnit==1
+                                    title({['Control vs Ripple, Stimulations, nRipples = ',num2str(nRipplesStim)],['firing rate ripple=',num2str(frS,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
+                                else
+                                    title(['firing rate ripple=',num2str(frS,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]);
+                                end
                             else
-                                title(['firing rate ripple=',num2str(frS,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]);
+                                resRipS = [];
+                                title('No data');
                             end
                             
                             %third plot - before vs stim
                             subplot(nInFigure*2,4,[(iUnit-1)*8+3 (iUnit-1)*8+7]);
-                            shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
-                            hold all;
-                            shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipS), std(resRipS)/sqrt(nRipplesStim),'lineprops','-r');
-                            hold off;
-                            
-                            [~,p] = ttest2(aucRipB,aucRipS);
-                            
-                            currylim = ylim;
-                            ymin = min(currylim(1),ymin);
-                            ymax = max(currylim(2),ymax);
-                            if iUnit==1
-                            legend({'Before','Stimulations'});
-                            end
-                            xlabel('Time (ms)');
-                            ylabel('Spike rate');
-                            if iUnit==1
-                                title({['Before vs Stimulations'], ['firing rate before=',num2str(frB,'%0.2g'),' stim=',num2str(frS,'%0.2g'),' p(two tailed)=',num2str(p)]});
+                            if ~isempty(resRipB) && ~isempty(resRipS)
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
+                                hold all;
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipS), std(resRipS)/sqrt(nRipplesStim),'lineprops','-r');
+                                hold off;
+                                
+                                [~,p] = ttest2(aucRipB,aucRipS);
+                                
+                                currylim = ylim;
+                                ymin = min(currylim(1),ymin);
+                                ymax = max(currylim(2),ymax);
+                                if iUnit==1
+                                    legend({'Before','Stimulations'});
+                                end
+                                xlabel('Time (ms)');
+                                ylabel('Spike rate');
+                                if iUnit==1
+                                    title({['Before vs Stimulations'], ['firing rate before=',num2str(frB,'%0.2g'),' stim=',num2str(frS,'%0.2g'),' p(two tailed)=',num2str(p)]});
+                                else
+                                    title(['firing rate before=',num2str(frB,'%0.2g'),' stim=',num2str(frS,'%0.2g'),' p(two tailed)=',num2str(p)]);
+                                end
+                                %make all ylimits the same
+                                for iPlot =  1:3
+                                    subplot(nInFigure*2,4,[(iUnit-1)*8+iPlot (iUnit-1)*8+iPlot+4]);
+                                    ylim([ymin ymax]);
+                                end
                             else
-                                title(['firing rate before=',num2str(frB,'%0.2g'),' stim=',num2str(frS,'%0.2g'),' p(two tailed)=',num2str(p)]);
-                            end
-                            %make all ylimits the same
-                            for iPlot =  1:3
-                                subplot(nInFigure*2,4,[(iUnit-1)*8+iPlot (iUnit-1)*8+iPlot+4]);
-                                ylim([ymin ymax]);
+                                title('No data');
                             end
                             
                             subplot(nInFigure*2,4,(iUnit-1)*8+4);
                             
-                            resStim = results(iPatient).resultsPerChan(iChan).stimTriggeredFireRates{currUnit};
-                            resStimControl = results(iPatient).resultsPerChan(iChan).controlForStimTriggered{currUnit};
-                            nStim = size(resStim,1);
-                            shadedErrorBar([-obj.windowSpikeRateAroundStim:obj.windowSpikeRateAroundStim]/obj.samplingRate, mean(resStim), std(resStim)/sqrt(nStim),'lineprops','-m');
-                            hold all;
-                            shadedErrorBar([-obj.windowSpikeRateAroundStim:obj.windowSpikeRateAroundStim]/obj.samplingRate, mean(resStimControl), std(resStimControl)/sqrt(nStim),'lineprops','-k');
-                            if iUnit == 1
-                                xlabel('Time (sec)');
-                                ylabel('Spike rate');
-                                %                             legend({'Stimulation','Control'});
-                                title('Stimulation triggered spike rate');
+                            if ~isempty(results(iPatient).resultsPerChan(iChan).stimTriggeredFireRates{currUnit})
+                                resStim = results(iPatient).resultsPerChan(iChan).stimTriggeredFireRates{currUnit};
+                                resStimControl = results(iPatient).resultsPerChan(iChan).controlForStimTriggered{currUnit};
+                                nStim = size(resStim,1);
+                                shadedErrorBar([-obj.windowSpikeRateAroundStim:obj.windowSpikeRateAroundStim]/obj.samplingRate, mean(resStim), std(resStim)/sqrt(nStim),'lineprops','-m');
+                                hold all;
+                                shadedErrorBar([-obj.windowSpikeRateAroundStim:obj.windowSpikeRateAroundStim]/obj.samplingRate, mean(resStimControl), std(resStimControl)/sqrt(nStim),'lineprops','-k');
+                                if iUnit == 1
+                                    xlabel('Time (sec)');
+                                    ylabel('Spike rate');
+                                    %                             legend({'Stimulation','Control'});
+                                    title('Stimulation triggered spike rate');
+                                end
+                            else
+                                title('No data');
                             end
                             
-                            subplot(nInFigure*2,4,(iUnit-1)*8+8);
-                            plot(results(iPatient).resultsPerChan(iChan).allSessionFireRates{currUnit},'color','k');
-                            hold all;
-                            stimRange = [results(iPatient).resultsPerChan(iChan).firstStim:results(iPatient).resultsPerChan(iChan).lastStim+obj.shortTimeRangeAfterStim*obj.samplingRate];
-                            plot(stimRange,results(iPatient).resultsPerChan(iChan).allSessionFireRates{currUnit}(stimRange),'color','m');
-                            if iUnit ==1
-                                xlabel('Time (ms)');
-                                ylabel('Spike rate');
-                                title('Spike rate for entire session');
+                            if ~isempty(results(iPatient).resultsPerChan(iChan).allSessionFireRates{currUnit})
+                                subplot(nInFigure*2,4,(iUnit-1)*8+8);
+                                plot(results(iPatient).resultsPerChan(iChan).allSessionFireRates{currUnit},'color','k');
+                                hold all;
+                                stimRange = [results(iPatient).resultsPerChan(iChan).firstStim:results(iPatient).resultsPerChan(iChan).lastStim+obj.shortTimeRangeAfterStim*obj.samplingRate];
+                                plot(stimRange,results(iPatient).resultsPerChan(iChan).allSessionFireRates{currUnit}(stimRange),'color','m');
+                                if iUnit ==1
+                                    xlabel('Time (ms)');
+                                    ylabel('Spike rate');
+                                    title('Spike rate for entire session');
+                                end
+                            else
+                                title('No data');
                             end
                             
                         end
@@ -1662,54 +1684,62 @@ classdef RippleDetector < handle
                     
                     %first plot - before ripple vs control
                     subplot(1,3,1);
-                    resRipB = results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore;
-                    resCont = results(iPatient).resultsPerChan(iChan).fireRateControlAvgUnitsBefore;
-                    nRipplesBefore = size(resRipB,1);
-                    shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
-                    hold all;
-                    shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesBefore),'lineprops','-b');
-                    hold off;
-                    %ttest around ripple
-                    
-                    aucRipB = sum(resRipB(:,indsForSign),2);
-                    aucCont = sum(resCont(:,indsForSign),2);
-                    frB = mean(mean(resRipB(:,indsForSign),2));
-                    frC = mean(mean(resCont(:,indsForSign),2));
-                    
-                    [~,p] = ttest(aucRipB,aucCont,'tail','right');
-                    currylim = ylim;
-                    ymin = min(currylim(1),ymin);
-                    ymax = max(currylim(2),ymax);
-                    
-                    legend({'Ripple','Control'});
-                    xlabel('Time (ms)');
-                    ylabel('Spike rate');
-                    title({['Control vs Ripple, Before, nRipples = ',num2str(nRipplesBefore)],['firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
+                    if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)
+                        resRipB = results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore;
+                        resCont = results(iPatient).resultsPerChan(iChan).fireRateControlAvgUnitsBefore;
+                        nRipplesBefore = size(resRipB,1);
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
+                        hold all;
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesBefore),'lineprops','-b');
+                        hold off;
+                        %ttest around ripple
+                        
+                        aucRipB = sum(resRipB(:,indsForSign),2);
+                        aucCont = sum(resCont(:,indsForSign),2);
+                        frB = mean(mean(resRipB(:,indsForSign),2));
+                        frC = mean(mean(resCont(:,indsForSign),2));
+                        
+                        [~,p] = ttest(aucRipB,aucCont,'tail','right');
+                        currylim = ylim;
+                        ymin = min(currylim(1),ymin);
+                        ymax = max(currylim(2),ymax);
+                        
+                        legend({'Ripple','Control'});
+                        xlabel('Time (ms)');
+                        ylabel('Spike rate');
+                        title({['Control vs Ripple, Before, nRipples = ',num2str(nRipplesBefore)],['firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
+                    else
+                        title('No Data');
+                    end
                     
                     %second plot - stimulation ripple vs control
                     subplot(1,3,2);
-                    resRipS = results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim;
-                    resCont = results(iPatient).resultsPerChan(iChan).fireRateControlAvgUnitsStim;
-                    nRipplesStim = size(resRipS,1);
-                    shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipS), std(resRipS)/sqrt(nRipplesStim),'lineprops','-r');
-                    hold all;
-                    shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesStim),'lineprops','-b');
-                    hold off;
-                    
-                    aucRipS = sum(resRipS(:,indsForSign),2);
-                    aucCont = sum(resCont(:,indsForSign),2);
-                    frS = mean(mean(resRipS(:,indsForSign),2));
-                    frC = mean(mean(resCont(:,indsForSign),2));
-                    
-                    [~,p] = ttest(aucRipS,aucCont,'tail','right');
-                    currylim = ylim;
-                    ymin = min(currylim(1),ymin);
-                    ymax = max(currylim(2),ymax);
-                    
-                    legend({'Ripple','Control'});
-                    xlabel('Time (ms)');
-                    ylabel('Spike rate');
-                    title({['Control vs Ripple, Stimulations, nRipples = ',num2str(nRipplesStim)],['firing rate ripple=',num2str(frS,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
+                    if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)
+                        resRipS = results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim;
+                        resCont = results(iPatient).resultsPerChan(iChan).fireRateControlAvgUnitsStim;
+                        nRipplesStim = size(resRipS,1);
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipS), std(resRipS)/sqrt(nRipplesStim),'lineprops','-r');
+                        hold all;
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesStim),'lineprops','-b');
+                        hold off;
+                        
+                        aucRipS = sum(resRipS(:,indsForSign),2);
+                        aucCont = sum(resCont(:,indsForSign),2);
+                        frS = mean(mean(resRipS(:,indsForSign),2));
+                        frC = mean(mean(resCont(:,indsForSign),2));
+                        
+                        [~,p] = ttest(aucRipS,aucCont,'tail','right');
+                        currylim = ylim;
+                        ymin = min(currylim(1),ymin);
+                        ymax = max(currylim(2),ymax);
+                        
+                        legend({'Ripple','Control'});
+                        xlabel('Time (ms)');
+                        ylabel('Spike rate');
+                        title({['Control vs Ripple, Stimulations, nRipples = ',num2str(nRipplesStim)],['firing rate ripple=',num2str(frS,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
+                    else
+                        title('No Data');
+                    end
                     
                     %third plot - before vs stim
                     subplot(1,3,3);
@@ -1731,6 +1761,28 @@ classdef RippleDetector < handle
                     for iPlot =  1:3
                         subplot(1,3,iPlot);
                         ylim([ymin ymax]);
+                    if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)/sqrt(nRipplesBefore),'lineprops','-g');
+                        hold all;
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)/sqrt(nRipplesStim),'lineprops','-r');
+                        hold off;
+                        legend({'Before','Stimulations'});
+                        xlabel('Time (ms)');
+                        ylabel('Spike rate');
+                        
+                        [~,p] = ttest2(aucRipB,aucRipS);
+                        currylim = ylim;
+                        ymin = min(currylim(1),ymin);
+                        ymax = max(currylim(2),ymax);
+                        title({['Before vs Stimulations'], ['firing rate before=',num2str(frB,'%0.2g'),' stim=',num2str(frS,'%0.2g'),' p(two tailed)=',num2str(p)]});
+                        
+                        for iPlot =  1:3
+                            subplot(1,3,iPlot);
+                            ylim([ymin ymax]);
+                        end
+                    else
+                        title('No Data');
+
                     end
                     
                     %                     subplot(2,2,1);
@@ -2019,4 +2071,6 @@ classdef RippleDetector < handle
             end
         end
     end
+    end
+
 end
