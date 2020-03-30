@@ -46,6 +46,7 @@ classdef RippleDetector < handle
         
         %params for spike rate around stimulations
         windowSpikeRateAroundStim = 500;
+        windowSpikeRateForComparison = 500;  %ms - for comparing between stim and control
         controlDistForStim = 1000; %ms
         
         avgRippleBeforeAfter = 1; %second
@@ -473,7 +474,7 @@ classdef RippleDetector < handle
             
         end
         
-        function [spikeRateSession, rateAroundStim, rateAroundControl] = getSpikeRateAtStim(obj, stimTimes, spikeTimes, dataDuration)
+        function [spikeRateSession, rateAroundStim, rateAroundControl, pval] = getSpikeRateAtStim(obj, stimTimes, spikeTimes, dataDuration)
             
             % receives the spike times and the stimulation times and calculates spike rates around stimulations and around 
             % control, and the spike rate through the session.
@@ -503,6 +504,9 @@ classdef RippleDetector < handle
             spikes(round(spikeTimes)) = 1;
             spikeRateSession = movsum(spikes,obj.firingRateWinSize,'Endpoints','fill')/(obj.firingRateWinSize/1000);
                         
+            windowSpikeRateForComparison = obj.windowSpikeRateForComparison*obj.samplingRate/1000;
+            indsForSign = obj.windowSpikeRateAroundStim+1:obj.windowSpikeRateAroundStim+windowSpikeRateForComparison;
+            
             rateAroundStim = zeros(nStim,obj.windowSpikeRateAroundStim*2+1);
             rateAroundControl = zeros(nStim,obj.windowSpikeRateAroundStim*2+1);
             
@@ -517,6 +521,12 @@ classdef RippleDetector < handle
                 rateAroundControl(iStim,:) = spikeRateSession(currControlTime-obj.windowSpikeRateAroundStim:currControlTime+obj.windowSpikeRateAroundStim);
                 
             end
+            
+            %calc pval of area under the curve of the spike rate
+            %(control vs stim)
+            aucStim = sum(rateAroundStim(:,indsForSign),2);
+            aucCont = sum(rateAroundControl(:,indsForSign),2);
+            [~,pval] = ttest(aucStim,aucCont,'tail','right');
             
             %the rate function through the entire session (by default up
             %until the last stimulation)
@@ -1016,13 +1026,14 @@ classdef RippleDetector < handle
                     stimTriggeredFireRates = cell(1,nUnits);
                     controlForStimTriggered = cell(1,nUnits);
                     allSessionFireRates = cell(1,nUnits);
+                    pvals = zeros(1, nUnits);
                     
                     %go over the units (single/multi)
                     for iUnit = 1:nUnits
                         [fireRateRipBefore{iUnit}, fireRateControlBefore{iUnit}] = obj.checkSpikeRateAtRip(ripplesTimes(ripplesBeforeStimInds), ripplesStartEnd(ripplesBeforeStimInds,:), spikeTimes{iUnit});
                         [fireRateRipStim{iUnit}, fireRateControlStim{iUnit}] = obj.checkSpikeRateAtRip(ripplesTimes(ripplesDuringStimInds), ripplesStartEnd(ripplesDuringStimInds,:), spikeTimes{iUnit});
                         
-                        [allSessionFireRates{iUnit}, stimTriggeredFireRates{iUnit}, controlForStimTriggered{iUnit}] = obj.getSpikeRateAtStim(stimTimes, spikeTimes{iUnit});
+                        [allSessionFireRates{iUnit}, stimTriggeredFireRates{iUnit}, controlForStimTriggered{iUnit}, pvals(iUnit)] = obj.getSpikeRateAtStim(stimTimes, spikeTimes{iUnit});
                     end
                                         
                     %find the spike rate for ripples and controls before
@@ -1047,6 +1058,7 @@ classdef RippleDetector < handle
                     resultsPerChan(iChan).allSessionFireRates = allSessionFireRates;
                     resultsPerChan(iChan).stimTriggeredFireRates = stimTriggeredFireRates;
                     resultsPerChan(iChan).controlForStimTriggered = controlForStimTriggered;
+                    resultsPerChan(iChan).pvalStimTriggeredFireRates = pvals;
                     resultsPerChan(iChan).firstStim = firstStim;
                     resultsPerChan(iChan).lastStim = lastStim;
                     
@@ -1091,7 +1103,9 @@ classdef RippleDetector < handle
             for iChan = 1:nChans-1
                 currRipTimes = find(ripplesMat(iChan,:));
                 for iRipple = 1:length(currRipTimes)
-                    otherChansClose = ripplesMat(iChan+1:end,currRipTimes(iRipple)-obj.ripplesDistMicrChanForMerge:currRipTimes(iRipple)+obj.ripplesDistMicrChanForMerge);
+                    minInd = max(1, currRipTimes(iRipple)-obj.ripplesDistMicrChanForMerge);
+                    maxInd = min(currRipTimes(iRipple)+obj.ripplesDistMicrChanForMerge,size(ripplesMat,2));
+                    otherChansClose = ripplesMat(iChan+1:end,minInd:maxInd);
                     %if the ripple also appears on another channel
                     if any(otherChansClose(:))
                         rippleTimesMerged(end+1) = currRipTimes(iRipple);
@@ -1102,20 +1116,209 @@ classdef RippleDetector < handle
             end
         end
         
+        function saveRipplesDetectionsMicro(obj, runData, runByChannel, useExistingRipples)
+            
+            % A wrapper for running ripples detection on micro channels. Ripple detection on micro channels is performed per area, where a ripple will be 
+            % considered “legitimate” if it appears in at least two channels in the area. Ripple in channel X and ripple in channel Y will be considered the 
+            % same ripple (and thus appear in both areas) if they are less
+            % than ripplesDistMicrChanForMerge ms apart (by default – 15 ms). . It’s also possible to disregard some of the channels (if they are noisy) by 
+            % adding them to the field ‘noisyChannels’ in the runData struct per that patient.
+            % By default, the wrapper detects and saves ripples per area, which means: A. Running and saving ripples for all of the micro channels in that area, 
+            % B. Running the ripples merge method (getRipplesFromMicroElectrodesInArea) and saving the merge ripples for the area.
+            % The list of areas on which the wrapper will run on is provided as part of the runData input struct, if left empty then the wrapper will run on all 
+            % the areas for that patient (based on the micro montage).
+            % Another option is to run ripple detection per micro channels, without the merging per area step. This is possible if the input parameter 
+            % runByChannel is set to true (by default it’s false) and the list of channels to run on is provided as part of the runData input struct.
+            % By default when requested to run on an area the method will first run the detections on all the channels in that area and save them. If 
+            % useExistingRipples is true, then before running the detection on a micro channel it will first check whether a ripples file for that channel 
+            % already exists and if it does will load it instead of running the detections – this is useful if the detections for some or all of the micro 
+            % channels in the area were already run and saved and we only want to run the missing ones + the merging step or only want to run the merging step 
+            % if all of them were already saved.
+            %
+            % The wrapper receives as input runData which is a struct array with the length as the number of patients. Each element (=patient) should have the 
+            % fields:
+            % PatientName
+            % areasToRunOn – a list of areas on which the ripples detection per channel and per area will be run. If left empty the method will run on all the 
+            % areas for that patient. If the input parameter runByChannel is true then this field is ignored and the run is by channel and not by area (by 
+            % default it’s false).
+            % channelsToRunOn – a list of channels for which the ripples detection will be performed and saved. This field is only relevant if the input 
+            % parameter runByChannel is true (by default, false), otherwise this field is ignored.
+            % noisyChannels – a list of micro channels that should be disregarded in the ripples detection process (i.e. 
+            % they are noisy and thus the ripples detected in them should not be considered in the ripples merging process). \
+            % This field is optional.
+            % microMontageFileName – the file name (including path) of the micromontage.
+            % MicroDataFolder – The folder in which the raw micro data is stored. The property fileNamePrefix of the class includes the prefix for the data 
+            % filenames (by default: ‘CSC’).
+            % MicroRipplesFileNames – name (including path) of the ripple mat files in which the ripple times for the micro channels should be saved. The 
+            % method will save ripples per channel as MicroRipplesFileNames<#channel index> and ripples per area as MicroRipplesFileNames<area name>.
+            % MicroSpikesFileNames – The filenames (including path) of the mat files that include the spike times. The method assumes the filename format is 
+            % SpikesFileNames<#area_name>. That means that for the detection of all the ripples on micro channels in the RAH area (for example) the same spikes 
+            % file is loaded with the name <MicroSpikesFileNames>RAH.mat.
+            % sleepScoringFileName – file name (including path) of the sleep scoring mat file. If not provided all the data will be used.
+
+            
+            if nargin < 3 || isempty(runByChannel)
+                runByChannel = false;
+            end
+            
+            if nargin < 4 || isempty(useExistingRipples)
+                useExistingRipples = false;
+            end
+            
+            rd = RippleDetector;
+             
+            %go over the patients
+            nPatients = length(runData);
+            for iPatient=1:nPatients
+                disp(['patient ',runData(iPatient).patientName]);
+                %default - run ripples by area
+                
+                if isfield(runData(iPatient), 'sleepScoringFileName') && ~isempty(runData(iPatient).sleepScoringFileName)
+                    try
+                        sleepScoring = load(runData(iPatient).sleepScoringFileName);
+                        sleepScoring = sleepScoring.sleep_score_vec;
+                    catch
+                        disp([runData(iPatient).sleepScoringFileName '.mat doesn''t exist']);
+                        sleepScoring = [];
+                    end
+                end
+                
+                %load micro montage
+                microMontage = load(runData(iPatient).microMontageFileName);
+                microMontage = microMontage.Montage;
+                
+                if ~runByChannel
+                    allAreas = {microMontage.Area};
+                    allChans = [microMontage.Channel];
+                    
+                    %areas can be provided in runData, or otherwise all
+                    %areas are loaded from the micro montage
+                    if isfield(runData(iPatient), 'areasToRunOn') && ~isempty(runData(iPatient).areasToRunOn)
+                        areasToRunOn = runData(iPatient).areasToRunOn;
+                    else %all areas from the micromontage
+                        areasToRunOn = unique(allAreas);
+                        areasToRunOn = areasToRunOn(cellfun(@(x)~isempty(x),areasToRunOn));
+                    end
+                    
+                    nAreas = length(areasToRunOn);
+                    for iArea = 1:nAreas
+                        currArea = areasToRunOn{iArea};                        
+                        disp(['area ',currArea,' ',num2str(iArea)','/',num2str(nAreas)]);
+                        
+                        %find micro channels indices
+                        currChanInds = allChans(strcmp(allAreas,currArea));
+                        %remove noisy channels if provided
+                        if isfield(runData(iPatient), 'noisyChannels') && ~isempty(runData(iPatient).noisyChannels)
+                            currChanInds = currChanInds(~ismember(currChanInds,runData(iPatient).noisyChannels));
+                        end
+                        
+                        nChans = length(currChanInds);
+                        
+                        %loading spikes for area
+                        disp(['loading spikes']);
+                        try
+                            peakTimes = load([runData(iPatient).MicroSpikesFileNames,currArea,'.mat']);
+                            peakTimes = peakTimes.peakTimes;
+                        catch
+                            disp([runData(iPatient).MicroSpikesFileNames,currArea,'.mat doesn''t exist']);
+                            peakTimes = [];
+                        end
+                        disp('running ripples per channel');
+                        ripplesTimesAll = cell(1,nChans);
+                        ripplesStartEndAll = cell(1,nChans);
+                        for iChan = 1:nChans
+                            
+                            currChan = currChanInds(iChan);
+                            %if useExistingRipples is true, first check
+                            %whether a ripples file already exists for this
+                            %channel
+                            if useExistingRipples
+                                try
+                                    ripplesData = [runData.MicroRipplesFileNames num2str(currChan) '.mat'];
+                                    ripplesData = load(ripplesData);
+                                    ripplesTimesAll{iChan} = ripplesData.ripplesTimes;
+                                    ripplesStartEndAll{iChan} = ripplesData.ripplesStartEnd;
+                                    continue;
+                                catch
+                                    ripplesTimesAll{iChan} = [];
+                                    ripplesStartEndAll{iChan} = [];
+                                end
+                            end
+                 
+                            try
+                                currData = load([runData(iPatient).MicroDataFolder,'\',obj.dataFilePrefix ,num2str(currChan),'.mat']);
+                                currData = currData.data;
+                            catch
+                                disp([runData(iPatient).MicroDataFolder,'\',obj.dataFilePrefix,num2str(currChan),'.mat doesnt exist']);
+                                continue;
+                            end
+                            
+                            [ripplesTimes, ripplesStartEnd] = rd.detectRipple(currData, sleepScoring, peakTimes);
+                            save([runData(iPatient).MicroRipplesFileNames,num2str(currChan),'.mat'],'ripplesTimes','ripplesStartEnd');
+                            ripplesTimesAll{iChan} = ripplesTimes;
+                            ripplesStartEndAll{iChan} = ripplesStartEnd;
+                        end
+                        
+                        if nChans>1
+                            [ripplesTimes,ripplesStartEnd] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimesAll, ripplesStartEndAll);
+                        else
+                            ripplesTimes = [];
+                            ripplesStartEnd = [];
+                        end
+                        
+                        save([runData(iPatient).MicroRipplesFileNames,currArea,'.mat'],'ripplesTimes','ripplesStartEnd');
+                    end
+                else %if we want to run for specific channels and not by area, no merging will be performed in this case
+                    nChannels = length(runData(iPatient).channelsToRunOn);
+                    for iChan = 1:nChans
+                        currChan = runData(iPatient).channelsToRunOn(iChan);
+                        currArea = microMontage(currChan).Area;
+                        disp(['Channel ',num2str(currChan)]);
+                        
+                        try
+                            currData = load([runData(iPatient).MicroDataFolder,'\',obj.dataFilePrefix ,num2str(currChan),'.mat']);
+                            currData = currData.data;
+                        catch
+                            disp([runData(iPatient).MicroDataFolder,'\',obj.dataFilePrefix,num2str(currChan),'.mat doesnt exist']);
+                            continue;
+                        end
+                        
+                        %loading spikes for area
+                        disp(['loading spikes']);
+                        try
+                            peakTimes = load([runData(iPatient).MicroSpikesFileNames,currArea,'.mat']);
+                            peakTimes = peakTimes.peakTimes;
+                        catch
+                            disp([runData(iPatient).MicroSpikesFileNames,currArea,'.mat doesn''t exist']);
+                            peakTimes = [];
+                        end
+                        
+                        [ripplesTimes, ripplesStartEnd] = rd.detectRipple(currData, sleepScoring, peakTimes);
+                        save([runData(iPatient).MicroRipplesFileNames,num2str(currChan),'.mat'],'ripplesTimes','ripplesStartEnd');
+                    end
+                end
+            end
+        end
+        
         function plotRipplesMicro(obj, runData, areaName, folderToSave)
             % The method plots ripples detected on micro channels. Ripple for single micro channels should be detected and 
             % saved in advance. The method loads ripples for single micro channels in the area, merges them and plots all 
             % the single ripples in figures where each column is a channel and each row is a ripple. Red circles appear in 
             % all the channels for which a ripple was detected – i.e. each row should have at least two red circles as only 
-            % ripples that are detected in at least two channels are considered legitimate.
+            % ripples that are detected in at least two channels are
+            % considered legitimate. . It’s also possible to disregard some of the channels (if they are noisy) by adding 
+            % them to the field 
             % It receives as input:
             % A. runData – a struct containing the fields:
             % patientName
             % microMontageFileName – the file name (including path) of the micromontage.
-            % microChannelsFolderToLoad – folder from which to read the micro data (the method assumes the prefix for the 
+            % MicroDataFolder – folder from which to read the micro data (the method assumes the prefix for the 
             % files is CSC, can be changed by the property dataFilePrefix)
-            % microRipplesFileNames – name (including path) of the ripple mat files in which the ripple times for the micro 
-            % channels are saved (the method assumes the name of the file is microRipplesFileNames<#channel index>
+            % MicroRipplesFileNames – name (including path) of the ripple mat files in which the ripple times for the micro 
+            % channels are saved (the method assumes the name of the file is MicroRipplesFileNames<#channel index>
+            % noisyChannels – a list of micro channels that should be disregarded in the ripples detection process (i.e. 
+            % they are noisy and thus the ripples detected in them should not be considered in the ripples merging process). \
+            % This field is optional.
             % B. areaName – name of the area (as appears in the micro montage) to plot the ripples for.
             % C. folderToSave (optional) – folder into which to save the figures.
 
@@ -1135,6 +1338,10 @@ classdef RippleDetector < handle
             allChans = [microMontage.Channel];
             
             currChanInds = allChans(strcmp(allAreas,areaName));
+            %remove noisy channels if provided
+            if isfield(runData, 'noisyChannels') && ~isempty(runData.noisyChannels)
+                currChanInds = currChanInds(~ismember(currChanInds,runData.noisyChannels));
+            end
             nChans = length(currChanInds);
             
             ripplesTimes = cell(1,nChans);
@@ -1146,12 +1353,12 @@ classdef RippleDetector < handle
                 currChan = currChanInds(iChan);
                 
                 try
-                    ripplesData = [runData.microRipplesFileNames num2str(currChan) '.mat'];
+                    ripplesData = [runData.MicroRipplesFileNames num2str(currChan) '.mat'];
                     ripplesData = load(ripplesData);
                     ripplesTimes{iChan} = ripplesData.ripplesTimes;
                     ripplesStartEnd{iChan} = ripplesData.ripplesStartEnd;
                 catch
-                    disp([runData.microRipplesFileNames num2str(currChan) '.mat doesn''t exist']);
+                    disp([runData.MicroRipplesFileNames num2str(currChan) '.mat doesn''t exist']);
                     ripplesTimes = [];
                 end
                 
@@ -1159,10 +1366,10 @@ classdef RippleDetector < handle
                 rippleTimesLog{iChan}(ripplesTimes{iChan}) = 1;
                 
                 try
-                    datas{iChan} = load([runData.microChannelsFolderToLoad,'\',obj.dataFilePrefix ,num2str(currChan),'.mat']);
+                    datas{iChan} = load([runData.MicroDataFolder,'\',obj.dataFilePrefix ,num2str(currChan),'.mat']);
                     datas{iChan} = datas{iChan}.data;
                 catch
-                    disp([runData.microChannelsFolderToLoad,'\',obj.dataFilePrefix,num2str(currChan),'.mat doesnt exist']);
+                    disp([runData.MicroDataFolder,'\',obj.dataFilePrefix,num2str(currChan),'.mat doesnt exist']);
                     continue;
                 end
             end
@@ -1231,8 +1438,8 @@ classdef RippleDetector < handle
             % Two more differences in the input runData struct, it should have the fields:
             % microMontageFileName - the file name (including path) of the micromontage (this is tinstead of 
             % macroMontageFileName).
-            % microRipplesFileNames - name (including path) of the ripple mat files in which the ripple times for the 
-            % micro channels are saved (the method assumes the name of the file is microRipplesFileNames <#channel index>). 
+            % MicroRipplesFileNames - name (including path) of the ripple mat files in which the ripple times for the 
+            % micro channels are saved (the method assumes the name of the file is MicroRipplesFileNames <#channel index>). 
             % This is instead of RipplesFileNames.
 
             
@@ -1257,11 +1464,11 @@ classdef RippleDetector < handle
                 lastStim = stimTimes(end);
                 dataDuration = lastStim+midTimeRangeAfterStim;
                 
-                %load macro montage
+                %load micro montage
                 microMontage = load(runData(iPatient).microMontageFileName);
                 microMontage = microMontage.Montage;
                 allAreas = {microMontage.Area};
-                allChans = [microMontage.Channel];
+%                 allChans = [microMontage.Channel];
                 
                 %load spike data
                 try
@@ -1287,40 +1494,54 @@ classdef RippleDetector < handle
                     
                     disp(['area ',currArea,' ',num2str(iArea)','/',num2str(nAreas)]);
                     
-                    %find micro channels indices 
-                    currChanInds = allChans(strcmp(allAreas,currArea));
-                    resultsPerChan(iArea).channelNum = currChanInds;
-                    nChans = length(currChanInds);
-                                        
-                    if isfield(runData(iPatient),'microRipplesFileNames') && ~isempty(runData(iPatient).microRipplesFileNames)
-                        
-                        ripplesTimes = cell(1,nChans);
-                        ripplesStartEnd = cell(1,nChans);
-                        
-                        for iChan = 1:nChans
-                            try
-                                ripplesData = [runData(iPatient).microRipplesFileNames num2str(currChanInds(iChan)) '.mat'];
-                                ripplesData = load(ripplesData);
-                                ripplesTimes{iChan} = ripplesData.ripplesTimes;
-                                ripInds = ripplesTimes{iChan} <= dataDuration;
-                                ripplesTimes{iChan} = ripplesTimes{iChan}(ripInds);
-                                ripplesStartEnd{iChan} = ripplesData.ripplesStartEnd(ripInds,:);
-                            catch
-                                disp([runData(iPatient).microRipplesFileNames num2str(currChanInds(iChan)) '.mat doesn''t exist']);
-                                ripplesTimes = [];
-                                ripplesStartEnd = [];
-                            end
-                        end
-                    else
-                        ripplesTimes = {};
-                        ripplesStartEnd = {};
+                    resultsPerChan(iArea).channelNum = [];
+                    
+                    %find micro channels indices
+                    %                     currChanInds = allChans(strcmp(allAreas,currArea));
+                    %                     resultsPerChan(iArea).channelNum = currChanInds;
+                    %                     nChans = length(currChanInds);
+                    %
+                    %                     if isfield(runData(iPatient),'MicroRipplesFileNames') && ~isempty(runData(iPatient).MicroRipplesFileNames)
+                    %
+                    %                         ripplesTimes = cell(1,nChans);
+                    %                         ripplesStartEnd = cell(1,nChans);
+                    %
+                    %                         for iChan = 1:nChans
+                    %                             try
+                    %                                 ripplesData = [runData(iPatient).MicroRipplesFileNames num2str(currChanInds(iChan)) '.mat'];
+                    %                                 ripplesData = load(ripplesData);
+                    %                                 ripplesTimes{iChan} = ripplesData.ripplesTimes;
+                    %                                 ripInds = ripplesTimes{iChan} <= dataDuration;
+                    %                                 ripplesTimes{iChan} = ripplesTimes{iChan}(ripInds);
+                    %                                 ripplesStartEnd{iChan} = ripplesData.ripplesStartEnd(ripInds,:);
+                    %                             catch
+                    %                                 disp([runData(iPatient).MicroRipplesFileNames num2str(currChanInds(iChan)) '.mat doesn''t exist']);
+                    %                                 ripplesTimes = [];
+                    %                                 ripplesStartEnd = [];
+                    %                             end
+                    %                         end
+                    %                     else
+                    %                         ripplesTimes = {};
+                    %                         ripplesStartEnd = {};
+                    %                     end
+                    %
+                    %                     [rippleTimesMerged,rippleStartEndMerged] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimes, ripplesStartEnd);
+                    %
+                    %                     ripplesTimes = rippleTimesMerged;
+                    %                     ripplesStartEnd = rippleStartEndMerged;
+                    
+                    try
+                        ripplesData = [runData(iPatient).MicroRipplesFileNames,currArea,'.mat'];
+                        ripplesData = load(ripplesData);
+                        ripplesTimes = ripplesData.ripplesTimes;
+                        ripInds = ripplesTimes <= dataDuration;
+                        ripplesTimes = ripplesTimes(ripInds);
+                        ripplesStartEnd = ripplesData.ripplesStartEnd(ripInds,:);
+                    catch
+                        disp([runData(iPatient).MicroRipplesFileNames,currArea,'.mat doesn''t exist']);
+                        continue;
                     end
-                    
-                    [rippleTimesMerged,rippleStartEndMerged] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimes, ripplesStartEnd);
-                    
-                    ripplesTimes = rippleTimesMerged;
-                    ripplesStartEnd = rippleStartEndMerged;
-                    
+                                        
                     ripplesBeforeStimInds = ripplesTimes<firstStim-obj.windowSpikeRateAroundRip;
                     %                     tmp = ripplesTimes>=firstStim&ripplesTimes<=stimTimes(end);
                     %only ripples that are short and mid effect and not too
@@ -1398,6 +1619,7 @@ classdef RippleDetector < handle
                     stimTriggeredFireRates = cell(1,nUnits);
                     controlForStimTriggered = cell(1,nUnits);
                     allSessionFireRates = cell(1,nUnits);
+                    pvals = zeros(1, nUnits);
                     
                     
                     %                     maxSpikeTime = 0;
@@ -1405,7 +1627,7 @@ classdef RippleDetector < handle
                         [fireRateRipBefore{iUnit}, fireRateControlBefore{iUnit}] = obj.checkSpikeRateAtRip(ripplesTimes(ripplesBeforeStimInds), ripplesStartEnd(ripplesBeforeStimInds,:), spikeTimes{iUnit});
                         [fireRateRipStim{iUnit}, fireRateControlStim{iUnit}] = obj.checkSpikeRateAtRip(ripplesTimes(ripplesDuringStimInds), ripplesStartEnd(ripplesDuringStimInds,:), spikeTimes{iUnit});
                         
-                        [allSessionFireRates{iUnit}, stimTriggeredFireRates{iUnit}, controlForStimTriggered{iUnit}] = obj.getSpikeRateAtStim(stimTimes, spikeTimes{iUnit});
+                        [allSessionFireRates{iUnit}, stimTriggeredFireRates{iUnit}, controlForStimTriggered{iUnit}, pvals(iUnit)] = obj.getSpikeRateAtStim(stimTimes, spikeTimes{iUnit});
                     end
                     
                     %                                         dataDuration = maxSpikeTime+obj.winFromLastSpike;
@@ -1430,6 +1652,7 @@ classdef RippleDetector < handle
                     resultsPerChan(iArea).allSessionFireRates = allSessionFireRates;
                     resultsPerChan(iArea).stimTriggeredFireRates = stimTriggeredFireRates;
                     resultsPerChan(iArea).controlForStimTriggered = controlForStimTriggered;
+                    resultsPerChan(iArea).pvalStimTriggeredFireRates = pvals;
                     resultsPerChan(iArea).firstStim = firstStim;
                     resultsPerChan(iArea).lastStim = lastStim;
                     
@@ -1564,6 +1787,7 @@ classdef RippleDetector < handle
                                     title(['Units ',num2str(results(iPatient).resultsPerChan(iChan).unitInds{currUnit}),' firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]);
                                 end
                             else
+                                nRipplesBefore = 0;
                                 resRipB = [];
                                 title('No data');
                             end
@@ -1603,6 +1827,7 @@ classdef RippleDetector < handle
                                 end
                             else
                                 resRipS = [];
+                                nRipplesStim = 0;
                                 title('No data');
                             end
                             
@@ -1651,10 +1876,13 @@ classdef RippleDetector < handle
                                     xlabel('Time (sec)');
                                     ylabel('Spike rate');
                                     %                             legend({'Stimulation','Control'});
-                                    title('Stimulation triggered spike rate');
+                                    title(['Stimulation triggered spike rate p(stim>control)=',num2str(results(iPatient).resultsPerChan(iChan).pvalStimTriggeredFireRates(currUnit))]);
+                                else
+                                    title(['p(stim>control)=',num2str(results(iPatient).resultsPerChan(iChan).pvalStimTriggeredFireRates(currUnit))]);
                                 end
                             else
                                 title('No data');
+                                nStim = 0;
                             end
                             
                             if ~isempty(results(iPatient).resultsPerChan(iChan).allSessionFireRates{currUnit})
@@ -1710,6 +1938,7 @@ classdef RippleDetector < handle
                         title({['Control vs Ripple, Before, nRipples = ',num2str(nRipplesBefore)],['firing rate ripple=',num2str(frB,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
                     else
                         title('No Data');
+                        nRipplesBefore = 0;
                     end
                     
                     %second plot - stimulation ripple vs control
@@ -1739,29 +1968,12 @@ classdef RippleDetector < handle
                         title({['Control vs Ripple, Stimulations, nRipples = ',num2str(nRipplesStim)],['firing rate ripple=',num2str(frS,'%0.2g'),' control=',num2str(frC,'%0.2g'),' p=',num2str(p)]});
                     else
                         title('No Data');
+                        nRipplesStim = 0;
                     end
                     
                     %third plot - before vs stim
                     subplot(1,3,3);
-                    shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)/sqrt(nRipplesBefore),'lineprops','-g');
-
-                    hold all;
-                    shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)/sqrt(nRipplesStim),'lineprops','-r');
-                    hold off;
-                    legend({'Before','Stimulations'});
-                    xlabel('Time (ms)');
-                    ylabel('Spike rate');
-                    
-                    [~,p] = ttest2(aucRipB,aucRipS);
-                    currylim = ylim;
-                    ymin = min(currylim(1),ymin);
-                    ymax = max(currylim(2),ymax);
-                    title({['Before vs Stimulations'], ['firing rate before=',num2str(frB,'%0.2g'),' stim=',num2str(frS,'%0.2g'),' p(two tailed)=',num2str(p)]});
-                    
-                    for iPlot =  1:3
-                        subplot(1,3,iPlot);
-                        ylim([ymin ymax]);
-                    if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)
+                    if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore) && ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)
                         shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)/sqrt(nRipplesBefore),'lineprops','-g');
                         hold all;
                         shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)/sqrt(nRipplesStim),'lineprops','-r');
