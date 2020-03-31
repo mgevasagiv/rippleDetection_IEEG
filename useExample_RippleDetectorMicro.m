@@ -9,7 +9,14 @@ macroMontageNames = {'MM487'};
 
 %ripple detection is per area - the field areasToRunOn specifies which
 %areas are run on per patient
-areasPerPatient = {{'REC','RAH','LEC','LAH'}};
+areasPerPatient = {{'RAH','REC'}};
+%ripples that area detected in a reference area at the same time will be
+%discarded, for each patient this list should be at the same length as
+%areasPerPatient to correspond to each area. If there is only one element
+%in the list all areas will be referenced to it, if the list is empty no
+%reference will be used
+referenceAreasPerPatient = {{'LAH','LEC'}};
+
 %this field will usually not be used, it's only relevant if for some reason
 %there is a need to do detection on specific micro channels - i.e. by
 %channel and not by area
@@ -27,6 +34,8 @@ for iPatient = 1:nPatients
     runData(iPatient).ExpDataFileName = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\',patients{iPatient},'_',expNames{iPatient},'_dataset.mat'];
     %sets for which areas the detection and analysis is performed
     runData(iPatient).areasToRunOn = areasPerPatient{iPatient};
+    %reference areas per patient (for the detection phase)
+    runData(iPatient).referenceAreas = referenceAreasPerPatient{iPatient};
     %The folder where the raw data is stored - you will need to change it
     runData(iPatient).MicroDataFolder = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\MICRO'];       
     %The folder+filename from which micro ripples are going to be loaded
@@ -56,7 +65,7 @@ rd = RippleDetector;
 rd.saveRipplesDetectionsMicro(runData);
 
 %% plotting micro ripples, second input parameter is the area name, third is a folder to save the figures to
-rd.plotRipplesMicro(runData(1), 'RAH', 'D:\SingleRipplesFolder');
+rd.plotRipplesMicro(runData(1), 'RAH', 'LAH', 'D:\SingleRipplesFolder');
 
 %% ripple related analyses - ripple spike correlation
 

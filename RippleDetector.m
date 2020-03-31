@@ -1122,18 +1122,22 @@ classdef RippleDetector < handle
             % considered “legitimate” if it appears in at least two channels in the area. Ripple in channel X and ripple in channel Y will be considered the 
             % same ripple (and thus appear in both areas) if they are less
             % than ripplesDistMicrChanForMerge ms apart (by default – 15 ms). . It’s also possible to disregard some of the channels (if they are noisy) by 
-            % adding them to the field ‘noisyChannels’ in the runData struct per that patient.
+            % adding them to the field ‘noisyChannels’ in the runData
+            % struct per that patient. After finding the area’s ripples based on “channels vote”, ripples can be filtered out if they appear at the same time at 
+            % other areas.
             % By default, the wrapper detects and saves ripples per area, which means: A. Running and saving ripples for all of the micro channels in that area, 
             % B. Running the ripples merge method (getRipplesFromMicroElectrodesInArea) and saving the merge ripples for the area.
             % The list of areas on which the wrapper will run on is provided as part of the runData input struct, if left empty then the wrapper will run on all 
-            % the areas for that patient (based on the micro montage).
+            % the areas for that patient (based on the micro montage). C. Filtering out ripples that appear at the same time (+- ripplesDistMicrChanForMerge ms) at 
+            % the reference area.
+            % The list of areas on which the wrapper will run on is provided as part of the runData input struct, if left empty then the wrapper will run on all 
+            % the areas for that patient (based on the micro montage). The reference areas area also provided as part of input struct (see documentation below).
             % Another option is to run ripple detection per micro channels, without the merging per area step. This is possible if the input parameter 
             % runByChannel is set to true (by default it’s false) and the list of channels to run on is provided as part of the runData input struct.
-            % By default when requested to run on an area the method will first run the detections on all the channels in that area and save them. If 
-            % useExistingRipples is true, then before running the detection on a micro channel it will first check whether a ripples file for that channel 
-            % already exists and if it does will load it instead of running the detections – this is useful if the detections for some or all of the micro 
+            % If useExistingRipples is true (default), then before running the detection on a micro channel it will first check whether a ripples file for that 
+            % channel already exists and if it does will load it instead of running the detections – this is useful if the detections for some or all of the micro 
             % channels in the area were already run and saved and we only want to run the missing ones + the merging step or only want to run the merging step 
-            % if all of them were already saved.
+            % if all of them were already saved. Otherwise if it is false the method will first run the detections on all the channels in that area and save them. 
             %
             % The wrapper receives as input runData which is a struct array with the length as the number of patients. Each element (=patient) should have the 
             % fields:
@@ -1141,6 +1145,9 @@ classdef RippleDetector < handle
             % areasToRunOn – a list of areas on which the ripples detection per channel and per area will be run. If left empty the method will run on all the 
             % areas for that patient. If the input parameter runByChannel is true then this field is ignored and the run is by channel and not by area (by 
             % default it’s false).
+            % referenceAreasPerPatient  - The number of areas in the referenceAreasPerPatient array per patient should either be at the same length as 
+            % areasToRunOn where each area in areasToRunOn has a corresponding reference or at length 1 such that all areas in areasToRunOn will be referenced 
+            % to the same area. If left empty no reference will be used.
             % channelsToRunOn – a list of channels for which the ripples detection will be performed and saved. This field is only relevant if the input 
             % parameter runByChannel is true (by default, false), otherwise this field is ignored.
             % noisyChannels – a list of micro channels that should be disregarded in the ripples detection process (i.e. 
@@ -1162,7 +1169,7 @@ classdef RippleDetector < handle
             end
             
             if nargin < 4 || isempty(useExistingRipples)
-                useExistingRipples = false;
+                useExistingRipples = true;
             end
             
             rd = RippleDetector;
@@ -1201,6 +1208,118 @@ classdef RippleDetector < handle
                     end
                     
                     nAreas = length(areasToRunOn);
+                    
+                    %remove ripples that occur in the reference area
+                    useRef = false;
+                    if isfield(runData(iPatient), 'referenceAreas') && ~isempty(runData(iPatient).referenceAreas)
+                        useRef = true;
+                        %the list of reference area can have one item in
+                        %which case all the areas will be referenced to it
+                        if length(runData(iPatient).referenceAreas)==1
+                            refAreas = cell(1,nAreas);
+                            refAreas(:) = runData(iPatient).referenceAreas;
+                        else
+                            %otherwise it should have the same length as
+                            %areasToRunOn
+                            if length(runData(iPatient).referenceAreas)~=nAreas
+                                disp(['Reference areas has a different length than number of areas']);
+                                useRef = false;
+                            else
+                                refAreas = runData(iPatient).referenceAreas;
+                            end
+                        end
+                    end
+                    
+                    if useRef
+                        
+                        %a cell to contain all reference ripples
+                        ripplesRef = cell(1,length(refAreas));
+                        
+                        %go over reference areas and save the ripples in them
+                        %if they don't exist already
+                        for iRefArea = 1:length(refAreas)
+                            currArea = refAreas{iRefArea};
+                            
+                            try
+                                %first try to load an existing reference
+                                %file
+                                ripplesData = [runData(iPatient).MicroRipplesFileNames,currArea,'REF.mat'];
+                                ripplesData = load(ripplesData);
+                                ripplesRef{iRefArea} = ripplesData.ripplesTimes;
+                            catch
+                                %if it doesn't exist - the method needs to
+                                %create it by itself
+                                disp(['REF area ',currArea,' doesn''t exist, creating file']);
+                                
+                                %find micro channels indices
+                                currChanInds = allChans(strcmp(allAreas,currArea));
+                                %remove noisy channels if provided
+                                if isfield(runData(iPatient), 'noisyChannels') && ~isempty(runData(iPatient).noisyChannels)
+                                    currChanInds = currChanInds(~ismember(currChanInds,runData(iPatient).noisyChannels));
+                                end
+                                
+                                nChans = length(currChanInds);
+                                
+                                %loading spikes for area
+                                disp(['loading spikes']);
+                                try
+                                    peakTimes = load([runData(iPatient).MicroSpikesFileNames,currArea,'.mat']);
+                                    peakTimes = peakTimes.peakTimes;
+                                catch
+                                    disp([runData(iPatient).MicroSpikesFileNames,currArea,'.mat doesn''t exist']);
+                                    peakTimes = [];
+                                end
+                                disp('running ripples per channel');
+                                ripplesTimesAll = cell(1,nChans);
+                                ripplesStartEndAll = cell(1,nChans);
+                                for iChan = 1:nChans
+                                    
+                                    currChan = currChanInds(iChan);
+                                    %if useExistingRipples is true, first check
+                                    %whether a ripples file already exists for this
+                                    %channel
+                                    if useExistingRipples
+                                        try
+                                            ripplesData = [runData.MicroRipplesFileNames num2str(currChan) '.mat'];
+                                            ripplesData = load(ripplesData);
+                                            ripplesTimesAll{iChan} = ripplesData.ripplesTimes;
+                                            ripplesStartEndAll{iChan} = ripplesData.ripplesStartEnd;
+                                            continue;
+                                        catch
+                                        end
+                                    end
+                                    
+                                    %load the data
+                                    try
+                                        currData = load([runData(iPatient).MicroDataFolder,'\',obj.dataFilePrefix ,num2str(currChan),'.mat']);
+                                        currData = currData.data;
+                                    catch
+                                        disp([runData(iPatient).MicroDataFolder,'\',obj.dataFilePrefix,num2str(currChan),'.mat doesnt exist']);
+                                        continue;
+                                    end
+                                    
+                                    %detect ripples on the channel and save
+                                    %them
+                                    [ripplesTimes, ripplesStartEnd] = rd.detectRipple(currData, sleepScoring, peakTimes);
+                                    save([runData(iPatient).MicroRipplesFileNames,num2str(currChan),'.mat'],'ripplesTimes','ripplesStartEnd');
+                                    ripplesTimesAll{iChan} = ripplesTimes;
+                                    ripplesStartEndAll{iChan} = ripplesStartEnd;
+                                end
+                                
+                                if nChans>1
+                                    %merge the ripples in the area
+                                    [ripplesTimes,ripplesStartEnd] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimesAll, ripplesStartEndAll);
+                                else
+                                    ripplesTimes = [];
+                                    ripplesStartEnd = [];
+                                end
+                                
+                                save([runData(iPatient).MicroRipplesFileNames,currArea,'REF.mat'],'ripplesTimes','ripplesStartEnd');
+                                ripplesRef{iRefArea} = ripplesTimes;
+                            end
+                        end
+                    end
+                    
                     for iArea = 1:nAreas
                         currArea = areasToRunOn{iArea};                        
                         disp(['area ',currArea,' ',num2str(iArea)','/',num2str(nAreas)]);
@@ -1266,6 +1385,27 @@ classdef RippleDetector < handle
                             ripplesStartEnd = [];
                         end
                         
+                        %if reference areas were provided - discard ripples
+                        %that occur in the same time as the reference area
+                        if useRef
+                            
+                            disp('Removing ripples that occur in reference area');
+                            maxTime = max(ripplesTimes)+obj.ripplesDistMicrChanForMerge;
+                            ripRefScatter = zeros(1,maxTime);
+                            ripRefScatter(ripplesRef{iArea}(ripplesRef{iArea}<=maxTime)) = 1;
+                            
+                            indsToRemove = [];
+                            for iRipple = 1:length(ripplesTimes)
+                                minInd = max(1, ripplesTimes(iRipple)-obj.ripplesDistMicrChanForMerge);
+                                if sum(ripRefScatter(minInd:ripplesTimes(iRipple)+obj.ripplesDistMicrChanForMerge))>0
+                                    indsToRemove = [indsToRemove;iRipple];
+                                end
+                            end
+                            
+                            ripplesTimes(indsToRemove) = [];
+                            ripplesStartEnd(indsToRemove,:) = [];
+                        end
+                                               
                         save([runData(iPatient).MicroRipplesFileNames,currArea,'.mat'],'ripplesTimes','ripplesStartEnd');
                     end
                 else %if we want to run for specific channels and not by area, no merging will be performed in this case
@@ -1300,14 +1440,17 @@ classdef RippleDetector < handle
             end
         end
         
-        function plotRipplesMicro(obj, runData, areaName, folderToSave)
-            % The method plots ripples detected on micro channels. Ripple for single micro channels should be detected and 
-            % saved in advance. The method loads ripples for single micro channels in the area, merges them and plots all 
-            % the single ripples in figures where each column is a channel and each row is a ripple. Red circles appear in 
-            % all the channels for which a ripple was detected – i.e. each row should have at least two red circles as only 
-            % ripples that are detected in at least two channels are
-            % considered legitimate. . It’s also possible to disregard some of the channels (if they are noisy) by adding 
-            % them to the field 
+        function plotRipplesMicro(obj, runData, areaName, refArea, folderToSave)
+            % The method plots ripples detected on micro channels. Ripple for single micro channels should be detected and saved in advance. The method loads 
+            % ripples for single micro channels in the area, merges them and plots all the single ripples in figures where each column is a channel and each 
+            % row is a ripple. If a reference area is provided the method also discards ripples that appear in the reference area at the same time. Note that 
+            % for the reference ripples the method will first try to load the saved ripples in the reference area (a file with the name 
+            % MicroRipplesFileNames<reference area name>REF) and if it doesn’t succeed it will load the single ripple files of the micro channels in the 
+            % reference area and will merge them to the reference area’s ripples.
+            % In the figures: red circles appear in all the channels for which a ripple was detected – i.e. each row should have at least two red circles as 
+            % only ripples that are detected in at least two channels are considered legitimate. It’s also possible to disregard some of the channels (if they 
+            % are noisy) by adding them to the field ‘noisyChannels’ in the runData struct per that patient.
+
             % It receives as input:
             % A. runData – a struct containing the fields:
             % patientName
@@ -1320,10 +1463,16 @@ classdef RippleDetector < handle
             % they are noisy and thus the ripples detected in them should not be considered in the ripples merging process). \
             % This field is optional.
             % B. areaName – name of the area (as appears in the micro montage) to plot the ripples for.
-            % C. folderToSave (optional) – folder into which to save the figures.
+            % C. refArea (optional) – name of the reference area, if left empty no reference will be used.
+            % D. folderToSave (optional) – folder into which to save the figures.
 
+            if nargin < 4 || isempty(refArea)
+                useRef = false;
+            else 
+                useRef = true;
+            end
             
-            if nargin < 4 || isempty(folderToSave)
+            if nargin < 5 || isempty(folderToSave)
                 toSave = false;
             else
                 toSave = true;
@@ -1336,6 +1485,53 @@ classdef RippleDetector < handle
             microMontage = microMontage.Montage;
             allAreas = {microMontage.Area};
             allChans = [microMontage.Channel];
+            
+            %load ref area or build it if it's not saved
+            if useRef
+                try
+                    %try to load ripples from ref area
+                    ripplesData = [runData.MicroRipplesFileNames,refArea,'REF.mat'];
+                    ripplesData = load(ripplesData);
+                    ripplesRef = ripplesData.ripplesTimes;
+                catch
+                    %if it doesn't exist - the method needs to
+                    %create it by itself
+                    disp(['REF area ',refArea,' doesn''t exist, creating ref ripples']);
+                    
+                    %find micro channels indices
+                    currChanInds = allChans(strcmp(allAreas,refArea));
+                    %remove noisy channels if provided
+                    if isfield(runData, 'noisyChannels') && ~isempty(runData.noisyChannels)
+                        currChanInds = currChanInds(~ismember(currChanInds,runData.noisyChannels));
+                    end
+                    
+                    nChans = length(currChanInds);
+                    
+                    ripplesTimesAll = cell(1,nChans);
+                    ripplesStartEndAll = cell(1,nChans);
+                    for iChan = 1:nChans
+                        currChan = currChanInds(iChan);
+                        try
+                            ripplesData = [runData.MicroRipplesFileNames num2str(currChan) '.mat'];
+                            ripplesData = load(ripplesData);
+                            ripplesTimesAll{iChan} = ripplesData.ripplesTimes;
+                            ripplesStartEndAll{iChan} = ripplesData.ripplesStartEnd;
+                        catch
+                            disp([runData.MicroRipplesFileNames num2str(currChan) '.mat doesn''t exist']);
+                            ripplesTimesAll{iChan} = [];
+                        end
+                    end
+                    
+                    if nChans>1
+                        %merge the ripples in the area
+                        [ripplesTimes,~] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimesAll, ripplesStartEndAll);
+                    else
+                        ripplesTimes = [];
+                    end
+                    
+                    ripplesRef = ripplesTimes;
+                end
+            end
             
             currChanInds = allChans(strcmp(allAreas,areaName));
             %remove noisy channels if provided
@@ -1375,6 +1571,23 @@ classdef RippleDetector < handle
             end
             
             [rippleTimesMerged,~] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimes, ripplesStartEnd);
+            
+            %remove ripples that appear also in ref
+            if useRef
+                maxTime = max(rippleTimesMerged)+obj.ripplesDistMicrChanForMerge;
+                ripRefScatter = zeros(1,maxTime);
+                ripRefScatter(ripplesRef(ripplesRef<=maxTime)) = 1;
+                
+                indsToRemove = [];
+                for iRipple = 1:length(rippleTimesMerged)
+                    minInd = max(1, rippleTimesMerged(iRipple)-obj.ripplesDistMicrChanForMerge);
+                    if sum(ripRefScatter(minInd:rippleTimesMerged(iRipple)+obj.ripplesDistMicrChanForMerge))>0
+                        indsToRemove = [indsToRemove;iRipple];
+                    end
+                end
+                
+                rippleTimesMerged(indsToRemove) = [];
+            end
 
             nRipples = length(rippleTimesMerged);
             nPlots = ceil(nRipples/obj.nInPlotMicro);
@@ -1562,12 +1775,7 @@ classdef RippleDetector < handle
                     ripplesDuringStimInds = ismember(ripplesTimes,find(ripplesIndsLog & stimInds));
                     
                     %find all units in spike data recorded in area
-                    unitInds = [];
-                    for ii_u = 1:length(spikeData.micro_channels_spike_summary.unit_list_xls)
-                        if strcmp(getfield(spikeData.micro_channels_spike_summary.unit_list_xls(ii_u),'Location'),currArea)
-                            unitInds = [unitInds, ii_u];
-                        end
-                    end
+                    unitInds = find(strcmp(extractfield(spikeData.micro_channels_spike_summary.unit_list_xls,'Location'),currArea));
                     
                     if obj.spikeMultiUnits
                         currChannels = [spikeData.micro_channels_spike_summary.unit_list_xls(unitInds).Channel];
@@ -1662,7 +1870,7 @@ classdef RippleDetector < handle
             end
             
             if ~isempty(fileNameResults)
-                save(fileNameResults,'results','-v7.3');
+                save(fileNameResults,'results');
             end
             
         end
@@ -1994,7 +2202,6 @@ classdef RippleDetector < handle
                         end
                     else
                         title('No Data');
-
                     end
                     
                     %                     subplot(2,2,1);
@@ -2283,6 +2490,4 @@ classdef RippleDetector < handle
             end
         end
     end
-    end
-
 end
