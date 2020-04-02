@@ -6,8 +6,13 @@ classdef RippleDetector < handle
         dataFilePrefix = 'CSC';
         
         %all the parameters are from Staresina et al (and Zhang et al is identical)
+        %minFreq = 80;
+        %maxFreq = 100;
+        
+        % ripple detection on MICRO channels - parameters as in Le Van
+        % Quyen et al 2008
         minFreq = 80;
-        maxFreq = 100;
+        maxFreq = 200;
         
         RMSWindowDuration = 20; %ms
         rippleThreshPercentile = 99;
@@ -229,8 +234,8 @@ classdef RippleDetector < handle
                     %find the location of the largest peak
                     currFilteredRipple = filteredData(rippleSegs(iRipple,1):rippleSegs(iRipple,2));
                     [~,maxLoc] = max(currFilteredRipple);
-%                     localMaxInds = find(localMax);
-%                     absMaxInd = localMaxInds(maxLoc)+rippleSegs(iRipple,1)-1;
+                    %                     localMaxInds = find(localMax);
+                    %                     absMaxInd = localMaxInds(maxLoc)+rippleSegs(iRipple,1)-1;
                     absMaxInd = maxLoc+rippleSegs(iRipple,1)-1;
                     %add it to the ripple indices list
                     rippleTimes(end+1) = absMaxInd;
@@ -241,8 +246,8 @@ classdef RippleDetector < handle
             end
         end
         
-%         function [rippleTimes, rippleStartEnd] = filterRipplesByRef(obj, rippleTimes, rippleStartEnd, refRipples)
-%         end
+        %         function [rippleTimes, rippleStartEnd] = filterRipplesByRef(obj, rippleTimes, rippleStartEnd, refRipples)
+        %         end
         
         function updateRippleTimes(obj, runData)
             %go over ripple times in folders and change max point - a one
@@ -323,7 +328,7 @@ classdef RippleDetector < handle
             %subplotSizeX
             
             if nargin < 3 || isempty(folderToSave)
-                toSave = false;                
+                toSave = false;
             else
                 toSave = true;
             end
@@ -351,50 +356,50 @@ classdef RippleDetector < handle
                     plot([-secondBefAfter:secondBefAfter]/obj.samplingRate,data(minInd:maxInd));
                     hold all;
                     plot([-secondBefAfter:secondBefAfter]/obj.samplingRate,filteredData(minInd:maxInd));
-%                     xlim([1 secondBefAfter*2]);
+                    %                     xlim([1 secondBefAfter*2]);
                     
                     title(['Ripple time = ', num2str(rippleTimes(indRipple)/obj.samplingRate/60),' mins']);
                     indRipple = indRipple+1;
                 end
                 if toSave
-                        set(f, 'Position', get(0, 'Screensize'));
-                        saveas(f, [folderToSave,'\all_ripples_' num2str(figInd),'.jpg']);
-                        close(f);
+                    set(f, 'Position', get(0, 'Screensize'));
+                    saveas(f, [folderToSave,'\all_ripples_' num2str(figInd),'.jpg']);
+                    close(f);
                 else
                     pause;
                 end
                 figInd = figInd+1;
             end
             
-%             remPlots = rem(nRipples,nInPlot);
-%             for iInPlot = 1:remPlots
-%                 subplot(obj.subplotSizeY,obj.subplotSizeX,iInPlot);
-%                 minInd = max(rippleTimes(indRipple)-secondBefAfter,1);
-%                 maxInd = min(rippleTimes(indRipple)+secondBefAfter,length(data));
-%                 hold off;
-%                 plot(data(minInd:maxInd));
-%                 hold all;
-%                 plot(filteredData(minInd:maxInd));
-%                 title(['Ripple time = ', num2str(rippleTimes(indRipple))]);
-%                 indRipple = indRipple+1;
-%             end
+            %             remPlots = rem(nRipples,nInPlot);
+            %             for iInPlot = 1:remPlots
+            %                 subplot(obj.subplotSizeY,obj.subplotSizeX,iInPlot);
+            %                 minInd = max(rippleTimes(indRipple)-secondBefAfter,1);
+            %                 maxInd = min(rippleTimes(indRipple)+secondBefAfter,length(data));
+            %                 hold off;
+            %                 plot(data(minInd:maxInd));
+            %                 hold all;
+            %                 plot(filteredData(minInd:maxInd));
+            %                 title(['Ripple time = ', num2str(rippleTimes(indRipple))]);
+            %                 indRipple = indRipple+1;
+            %             end
         end
         
         function [fireRateRip, fireRateControl] = checkSpikeRateAtRip(obj, rippleTimes, rippleStartEnd, spikeTimes, dataDuration)
             
-            % a method which receives the ripple and spike times and returns the spike rate around ripples and around 
+            % a method which receives the ripple and spike times and returns the spike rate around ripples and around
             % controls
             % The input is:
             % rippleTimes – array of ripple times
-            % rippleStartEnd – matrix where each row is a ripple and index <I,1> is the start point of ripple I and index 
+            % rippleStartEnd – matrix where each row is a ripple and index <I,1> is the start point of ripple I and index
             % <I,2> is the end point of ripple i.
-            % spikeTimes – array of spike times, can also be a cell array of arrays of spike times, in which case the 
+            % spikeTimes – array of spike times, can also be a cell array of arrays of spike times, in which case the
             % analysis will be performed on the average spike rate.
             % dataDuration (optional) – the length of the session in ms.
             % The output is:
-            % fireRateRip – matrix with the number of rows and the number of ripples where each row is the average spike 
+            % fireRateRip – matrix with the number of rows and the number of ripples where each row is the average spike
             % rate around the ripples.
-            % fireRateControl - matrix with the number of rows and the number of ripples where each row is the average 
+            % fireRateControl - matrix with the number of rows and the number of ripples where each row is the average
             % spike rate around the controls.
             
             
@@ -443,7 +448,7 @@ classdef RippleDetector < handle
             fireRateControl = [];
             
             for iRipple=1:nRipples
-
+                
                 %the control is a random point in the vicinity (as determined by min/maxDistControl) of the ripple
                 %which doesn't fall on another ripple
                 
@@ -457,28 +462,29 @@ classdef RippleDetector < handle
                     indsWithNoRipples = find(ripplesSegsLog(possInds)==0);
                 end
                 controlIndForRate = possInds(indsWithNoRipples(randi(length(indsWithNoRipples))));
-                     
-                %add to spike rate averaged around ripple 
+                
+                %add to spike rate averaged around ripple
                 if rippleTimes(iRipple)-obj.windowSpikeRateAroundRip>=1 && rippleTimes(iRipple)+obj.windowSpikeRateAroundRip<=dataDuration
                     currUnitsAvg = zeros(1,2*obj.windowSpikeRateAroundRip+1);
                     currUnitsAvgControl = zeros(1,2*obj.windowSpikeRateAroundRip+1);
                     for iUnit = 1:nUnits
                         currUnitsAvg = currUnitsAvg+spikeRate{iUnit}(rippleTimes(iRipple)-obj.windowSpikeRateAroundRip:rippleTimes(iRipple)+obj.windowSpikeRateAroundRip);
-                        currUnitsAvgControl = currUnitsAvgControl+spikeRate{iUnit}(controlIndForRate-obj.windowSpikeRateAroundRip:controlIndForRate+obj.windowSpikeRateAroundRip);
+                        currUnitsAvgControl = currUnitsAvgControl+spikeRate{iUnit}(max(1,controlIndForRate-obj.windowSpikeRateAroundRip):... % MGS - fixed boundary conditions
+                                                                                                    min(controlIndForRate+obj.windowSpikeRateAroundRip,length(spikeRate{iUnit})));
                     end
                     fireRateRip(end+1,:) = currUnitsAvg/nUnits;
                     fireRateControl(end+1,:) = currUnitsAvgControl/nUnits;
                 end
-
+                
             end
             
         end
         
         function [spikeRateSession, rateAroundStim, rateAroundControl, pval] = getSpikeRateAtStim(obj, stimTimes, spikeTimes, dataDuration)
             
-            % receives the spike times and the stimulation times and calculates spike rates around stimulations and around 
+            % receives the spike times and the stimulation times and calculates spike rates around stimulations and around
             % control, and the spike rate through the session.
-            % The controls for stimulations are the time points controlDistForStim (by default 1000ms) before the 
+            % The controls for stimulations are the time points controlDistForStim (by default 1000ms) before the
             % stimulations.
             % The spike rates are calculated by using movsum with a window size firingRateWinSize (by default 100 ms).
             % Input:
@@ -489,7 +495,7 @@ classdef RippleDetector < handle
             % spikeRateSession – the spike rate function through the entire session
             % rateAroundStim – a matrix where each row is the spike rate around a stimulation
             % rateAroundControl – a matrix where each row is the spike rate around the control
-
+            
             if nargin < 4
                 dataDuration = max(stimTimes) + obj.shortTimeRangeAfterStim*obj.samplingRate;
             end
@@ -503,7 +509,7 @@ classdef RippleDetector < handle
             spikes = zeros(1, dataDuration);
             spikes(round(spikeTimes)) = 1;
             spikeRateSession = movsum(spikes,obj.firingRateWinSize,'Endpoints','fill')/(obj.firingRateWinSize/1000);
-                        
+            
             windowSpikeRateForComparison = obj.windowSpikeRateForComparison*obj.samplingRate/1000;
             indsForSign = obj.windowSpikeRateAroundStim+1:obj.windowSpikeRateAroundStim+windowSpikeRateForComparison;
             
@@ -543,48 +549,48 @@ classdef RippleDetector < handle
             % D. Average of TFR around spindles – before stimatulation.
             % E. Polar histogram of synchronization index between spindles and ripples range.
             %
-            % The input runData is a struct in the length of number of patients (for which the analysis is required). 
-            % In addition it receives the input parameter fileNameResults which includes the file name into which the results 
+            % The input runData is a struct in the length of number of patients (for which the analysis is required).
+            % In addition it receives the input parameter fileNameResults which includes the file name into which the results
             % will be saved (optional).
             % Each element (=patient) in runData should include the fields:
             % patientName
             % channelsToRunOn – list of channel indices for which to perform the analysis.
-            % DataFolder – The folder in which the raw data files are saved (the method assumes the prefix for the files is 
+            % DataFolder – The folder in which the raw data files are saved (the method assumes the prefix for the files is
             % CSC, can be changed by the property dataFilePrefix).
             % macroMontageFileName - the file name (including path) of the macromontage.
-            % RipplesFileNames - name (including path) of the ripple mat files in which the ripple times for the macro 
+            % RipplesFileNames - name (including path) of the ripple mat files in which the ripple times for the macro
             % channels are saved (the method assumes the name of the file is RipplesFileNames <#channel index>
-            % SpindlesFileNames - name (including path) of the spindle mat files in which the spindle times for the macro 
+            % SpindlesFileNames - name (including path) of the spindle mat files in which the spindle times for the macro
             % channels are saved (the method assumes the name of the file is SpindlesFileNames <#channel index>
-            % SpikesFileNames - name (including path) of the spikes mat files in which the spikes times for the macro channels 
-            % are saved (the method assumes the name of the file is SpikesFileNames <#channel index>). If not provided spikes 
+            % SpikesFileNames - name (including path) of the spikes mat files in which the spikes times for the macro channels
+            % are saved (the method assumes the name of the file is SpikesFileNames <#channel index>). If not provided spikes
             % will not be removed from the data for the analysis.
             % sleepScoringFileName – file name (including path) of the sleep scoring mat file. If not provided all the data will be used.
             %
-            % The output struct results includes all the results of the analysis, which can then be plotted using 
-            % plotResultsRipplesData. The output struct is a struct with the length of the number of patients (=the length 
+            % The output struct results includes all the results of the analysis, which can then be plotted using
+            % plotResultsRipplesData. The output struct is a struct with the length of the number of patients (=the length
             % of runData), where each element includes:
             % patientName
-            % resultsPerChan – a struct in the length of the number of channels required for the analysis per the patient. 
+            % resultsPerChan – a struct in the length of the number of channels required for the analysis per the patient.
             % Each element in resultsPerChan includes the fields:
             % channelNum
             % area
-            % nRipplesBefore, nRipplesStim - number of ripples before stimulations and after stimulations (short effect) 
+            % nRipplesBefore, nRipplesStim - number of ripples before stimulations and after stimulations (short effect)
             % respectively
             % avgBefore, avgStim – average ripples before stimulations and after stimulations (short effect) respectively
             % stdBefore, stdStim – std of ripples before stimulations and after stimulations (short effect) respectively
-            % specBefore, specStim – spectrum of ripples average before stimulations and after stimulations (short effect) 
+            % specBefore, specStim – spectrum of ripples average before stimulations and after stimulations (short effect)
             % respectively
-            % meanTFRRipBefore, meanTFRRipStim – mean of ripple triggered TFR before stimulations and after stimulations 
+            % meanTFRRipBefore, meanTFRRipStim – mean of ripple triggered TFR before stimulations and after stimulations
             % (short effect) respectively
-            % SIanglesSpRip – Synchronization Indices of spindles-ripples before stimaulations (an array with the length as 
+            % SIanglesSpRip – Synchronization Indices of spindles-ripples before stimaulations (an array with the length as
             % number of spindles)
             % R – results of the r-test for the polar histogram (of SIanglesSpRip)
             % V – results of the v-test for the polar histogram (of SIanglesSpRip)
             % meanSpecs – mean spindle-triggered TFR before stimulations.
             % meanEpochs – mean spindle for the spindles for which meanSpecs were calculated.
             % nEpochs – number of spindles in the spindle-ripple analyses (all before stimatulions).
-
+            
             
             if nargin < 3
                 fileNameResults = '';
@@ -735,7 +741,7 @@ classdef RippleDetector < handle
                         stdBefore = nan(1,size(ripplesBefore,2));
                         specBefore = nan(length(obj.freqoiForAvgSpec),1);
                     end
-                        
+                    
                     %after stimulations
                     for iRipple = 1:nRipplesStim
                         ripplesStim(iRipple,:) = data(ripplesTimesStim(iRipple)-avgRippleBeforeAfter:ripplesTimesStim(iRipple)+avgRippleBeforeAfter);
@@ -804,68 +810,68 @@ classdef RippleDetector < handle
         
         function results = runRipSpikes(obj, runData, fileNameResults)
             % The method produces information about correlation between ripples and spikes.
-            % The analysis is performed per requested macro channel and examines the relationship between ripples in that 
-            % macro channel and spikes in all the micro channels in the same area (based on the macro and micro montages). 
-            % Analysis is performed for the macro channel vs spike rate in each single/multi unit in the area and also vs 
-            % the average spike rate of the single/multi units. The property spikeMultiUnits sets whether the analysis is 
+            % The analysis is performed per requested macro channel and examines the relationship between ripples in that
+            % macro channel and spikes in all the micro channels in the same area (based on the macro and micro montages).
+            % Analysis is performed for the macro channel vs spike rate in each single/multi unit in the area and also vs
+            % the average spike rate of the single/multi units. The property spikeMultiUnits sets whether the analysis is
             % on single or multi units (by default it’s set to true – i.e. multi units).
-            % The main result is the firing rate in a time window around ripples and around controls for ripples before 
-            % the stimulations and for ripples during the stimulations (short+mid effect). The time window is set by 
-            % windowSpikeRateAroundRip. The controls are random points which are: a. at least minDistControl 
-            % before or after the ripple, b. no more than maxDistControl before or after the ripple, c. do not coincide 
+            % The main result is the firing rate in a time window around ripples and around controls for ripples before
+            % the stimulations and for ripples during the stimulations (short+mid effect). The time window is set by
+            % windowSpikeRateAroundRip. The controls are random points which are: a. at least minDistControl
+            % before or after the ripple, b. no more than maxDistControl before or after the ripple, c. do not coincide
             % with a different ripple.
-            % Single/multi units in which the spike rate is below minSpikeRateToIncludeUnit (by default 1Hz) are not 
+            % Single/multi units in which the spike rate is below minSpikeRateToIncludeUnit (by default 1Hz) are not
             % included in the analysis.
-            % The method also returns stimulation triggered spike rate and the spike rate through the entire session 
-            % (before and during stimulations). The stimulation triggered spike rate is presented vs a control, which is 
+            % The method also returns stimulation triggered spike rate and the spike rate through the entire session
+            % (before and during stimulations). The stimulation triggered spike rate is presented vs a control, which is
             % the time point controlDistForStim before the stimulation.
             % The spike rates are calculated by using movsum with a window size firingRateWinSize.
             %
-            % The input runData is a struct in the length of number of patients (for which the analysis is required). 
-            % In addition it receives the input parameter fileNameResults which includes the file name into which the 
+            % The input runData is a struct in the length of number of patients (for which the analysis is required).
+            % In addition it receives the input parameter fileNameResults which includes the file name into which the
             % results will be saved (optional).
             % Each element (=patient) in runData should include the fields:
             % patientName
             % channelsToRunOn – list of channel indices for which to perform the analysis.
             % ExpDataFileName – name (including path) of the EXP_DATA for the patient.
-            % spikeData – name (including path) of the file which includes the spike data for the patient (i.e. the file 
+            % spikeData – name (including path) of the file which includes the spike data for the patient (i.e. the file
             % which usually has the name <patientName>_spike_timestamps_post_processing.mat).
             % macroMontageFileName - the file name (including path) of the macromontage.
-            % RipplesFileNames - name (including path) of the ripple mat files in which the ripple times for the macro 
+            % RipplesFileNames - name (including path) of the ripple mat files in which the ripple times for the macro
             % channels are saved (the method assumes the name of the file is RipplesFileNames <#channel index>
             %
-            % The output struct results includes all the results of the analysis, which can then be plotted using 
+            % The output struct results includes all the results of the analysis, which can then be plotted using
             % plotResultsSpikes. The output struct is a struct with the length of the number of patients (=the length of runData), where each element includes:
             % patientName
-            % resultsPerChan – a struct in the length of the number of channels required for the analysis per the patient. 
+            % resultsPerChan – a struct in the length of the number of channels required for the analysis per the patient.
             % Each element in resultsPerChan includes the fields:
             % channelNum
             % area
-            % unitInds – a cell array with the single/multi unit indices for this area. If using multi units each element 
+            % unitInds – a cell array with the single/multi unit indices for this area. If using multi units each element
             % in the cell array is an array including all the single units per multi unit.
-            % spikeTimes – a cell array with the length as the number of units where each element is the spike times for 
+            % spikeTimes – a cell array with the length as the number of units where each element is the spike times for
             % that unit.
-            % fireRateRipBefore, fireRateRipStim – cell array with the length as the number of units where each element is 
-            % the average spike rate around ripples for that unit for all the ripples before the stimulation and during the 
+            % fireRateRipBefore, fireRateRipStim – cell array with the length as the number of units where each element is
+            % the average spike rate around ripples for that unit for all the ripples before the stimulation and during the
             % stimulations (short+mid effect together) respectively.
-            % fireRateRipAvgUnitsBefore, fireRateRipAvgUnitsStim – the average spike rate around ripples averaged over all 
-            % units for all the ripples before the stimulation and during the stimulations (short+mid effect together) 
+            % fireRateRipAvgUnitsBefore, fireRateRipAvgUnitsStim – the average spike rate around ripples averaged over all
+            % units for all the ripples before the stimulation and during the stimulations (short+mid effect together)
             % respectively.
-            % fireRateControlBefore, fireRateControlStim - cell array with the length as the number of units where each 
-            % element is the average spike rate around controls for that unit for all the ripples before the stimulation 
+            % fireRateControlBefore, fireRateControlStim - cell array with the length as the number of units where each
+            % element is the average spike rate around controls for that unit for all the ripples before the stimulation
             % and during the stimulations (short+mid effect together) respectively.
-            % fireRateControlAvgUnitsBefore, fireRateControlAvgUnitsStim - the average spike rate around controls for all 
-            % the ripples averaged over all units before the stimulation and during the stimulations (short+mid effect 
+            % fireRateControlAvgUnitsBefore, fireRateControlAvgUnitsStim - the average spike rate around controls for all
+            % the ripples averaged over all units before the stimulation and during the stimulations (short+mid effect
             % together) respectively.
-            % allSessionFireRates - cell array with the length as the number of units where each element is spike rate 
+            % allSessionFireRates - cell array with the length as the number of units where each element is spike rate
             % across the session (before and during stimulations).
-            % stimTriggeredFireRates - cell array with the length as the number of units where each element is a matrix 
+            % stimTriggeredFireRates - cell array with the length as the number of units where each element is a matrix
             % where each row is the spike rate function around a stimulation.
-            % controlForStimTriggered - cell array with the length as the number of units where each element is a matrix 
+            % controlForStimTriggered - cell array with the length as the number of units where each element is a matrix
             % where each row is the spike rate function around the control per stimulation.
             % firstStim – time of first stimulation.
             % lastStim – time of last stimulation.
-
+            
             if nargin < 3
                 fileNameResults = '';
             end
@@ -936,7 +942,7 @@ classdef RippleDetector < handle
                     
                     %ripple times before the stimulations
                     ripplesBeforeStimInds = ripplesTimes<(firstStim-obj.windowSpikeRateAroundRip);
-
+                    
                     %ripple times during the stimulations - only ripples that are short and mid effect and not too
                     %close to the stimulus are counted
                     dataDuration = stimTimes(end)+midTimeRangeAfterStim;
@@ -988,7 +994,7 @@ classdef RippleDetector < handle
                             %merge spike data to create multi unit
                             currSpikeTimes = sort(cat(1,spikeData.micro_channels_spike_summary.spike_timestamps{currUinds}));
                             currSpikeTimes = currSpikeTimes(currSpikeTimes <= dataDuration);
-                            %only use the multiunit if the firing rate is above  a threshold 
+                            %only use the multiunit if the firing rate is above  a threshold
                             if length(currSpikeTimes)/(dataDuration/obj.samplingRate) >= obj.minSpikeRateToIncludeUnit
                                 spikeTimes{end+1} = currSpikeTimes;
                                 newUnitInds{end+1} = currUinds;
@@ -1035,7 +1041,7 @@ classdef RippleDetector < handle
                         
                         [allSessionFireRates{iUnit}, stimTriggeredFireRates{iUnit}, controlForStimTriggered{iUnit}, pvals(iUnit)] = obj.getSpikeRateAtStim(stimTimes, spikeTimes{iUnit});
                     end
-                                        
+                    
                     %find the spike rate for ripples and controls before
                     %and during the stimulations for the average spike rate
                     %over the units
@@ -1074,16 +1080,16 @@ classdef RippleDetector < handle
         end
         
         function [rippleTimesMerged,rippleStartEndMerged] = getRipplesFromAllMicroElectrodesInArea(obj, ripplesTimes, ripplesStartEnd)
-            % The ripples detection on micro channels is performed per area – i.e. the detection takes into account all the 
-            % channels in that area. The method getRipplesFromMicroElectrodesInArea receives a cell array of ripple detections 
-            % for the channels in a given area (i.e. 8 channels if the area has 8 micro channels) and a cell array of 
+            % The ripples detection on micro channels is performed per area – i.e. the detection takes into account all the
+            % channels in that area. The method getRipplesFromMicroElectrodesInArea receives a cell array of ripple detections
+            % for the channels in a given area (i.e. 8 channels if the area has 8 micro channels) and a cell array of
             % start-end indices per ripple.
-            % Ripple will be considered “legitimate” if it appears in at least two channels in the area. Ripple in channel X 
-            % and ripple in channel Y will be considered the same ripple (and thus appear in both areas) if they are less than 
+            % Ripple will be considered “legitimate” if it appears in at least two channels in the area. Ripple in channel X
+            % and ripple in channel Y will be considered the same ripple (and thus appear in both areas) if they are less than
             % ripplesDistMicrChanForMerge ms apart.
             %
             % The method returns the merged ripple times and ripple start-end times.
-
+            
             
             nChans = length(ripplesTimes);
             maxRippleTime = -inf;
@@ -1118,44 +1124,44 @@ classdef RippleDetector < handle
         
         function saveRipplesDetectionsMicro(obj, runData, runByChannel, useExistingRipples)
             
-            % A wrapper for running ripples detection on micro channels. Ripple detection on micro channels is performed per area, where a ripple will be 
-            % considered “legitimate” if it appears in at least two channels in the area. Ripple in channel X and ripple in channel Y will be considered the 
+            % A wrapper for running ripples detection on micro channels. Ripple detection on micro channels is performed per area, where a ripple will be
+            % considered “legitimate” if it appears in at least two channels in the area. Ripple in channel X and ripple in channel Y will be considered the
             % same ripple (and thus appear in both areas) if they are less
-            % than ripplesDistMicrChanForMerge ms apart (by default – 15 ms). . It’s also possible to disregard some of the channels (if they are noisy) by 
+            % than ripplesDistMicrChanForMerge ms apart (by default – 15 ms). . It’s also possible to disregard some of the channels (if they are noisy) by
             % adding them to the field ‘noisyChannels’ in the runData struct per that patient.
-            % By default, the wrapper detects and saves ripples per area, which means: A. Running and saving ripples for all of the micro channels in that area, 
+            % By default, the wrapper detects and saves ripples per area, which means: A. Running and saving ripples for all of the micro channels in that area,
             % B. Running the ripples merge method (getRipplesFromMicroElectrodesInArea) and saving the merge ripples for the area.
-            % The list of areas on which the wrapper will run on is provided as part of the runData input struct, if left empty then the wrapper will run on all 
+            % The list of areas on which the wrapper will run on is provided as part of the runData input struct, if left empty then the wrapper will run on all
             % the areas for that patient (based on the micro montage).
-            % Another option is to run ripple detection per micro channels, without the merging per area step. This is possible if the input parameter 
+            % Another option is to run ripple detection per micro channels, without the merging per area step. This is possible if the input parameter
             % runByChannel is set to true (by default it’s false) and the list of channels to run on is provided as part of the runData input struct.
-            % By default when requested to run on an area the method will first run the detections on all the channels in that area and save them. If 
-            % useExistingRipples is true, then before running the detection on a micro channel it will first check whether a ripples file for that channel 
-            % already exists and if it does will load it instead of running the detections – this is useful if the detections for some or all of the micro 
-            % channels in the area were already run and saved and we only want to run the missing ones + the merging step or only want to run the merging step 
+            % By default when requested to run on an area the method will first run the detections on all the channels in that area and save them. If
+            % useExistingRipples is true, then before running the detection on a micro channel it will first check whether a ripples file for that channel
+            % already exists and if it does will load it instead of running the detections – this is useful if the detections for some or all of the micro
+            % channels in the area were already run and saved and we only want to run the missing ones + the merging step or only want to run the merging step
             % if all of them were already saved.
             %
-            % The wrapper receives as input runData which is a struct array with the length as the number of patients. Each element (=patient) should have the 
+            % The wrapper receives as input runData which is a struct array with the length as the number of patients. Each element (=patient) should have the
             % fields:
             % PatientName
-            % areasToRunOn – a list of areas on which the ripples detection per channel and per area will be run. If left empty the method will run on all the 
-            % areas for that patient. If the input parameter runByChannel is true then this field is ignored and the run is by channel and not by area (by 
+            % areasToRunOn – a list of areas on which the ripples detection per channel and per area will be run. If left empty the method will run on all the
+            % areas for that patient. If the input parameter runByChannel is true then this field is ignored and the run is by channel and not by area (by
             % default it’s false).
-            % channelsToRunOn – a list of channels for which the ripples detection will be performed and saved. This field is only relevant if the input 
+            % channelsToRunOn – a list of channels for which the ripples detection will be performed and saved. This field is only relevant if the input
             % parameter runByChannel is true (by default, false), otherwise this field is ignored.
-            % noisyChannels – a list of micro channels that should be disregarded in the ripples detection process (i.e. 
+            % noisyChannels – a list of micro channels that should be disregarded in the ripples detection process (i.e.
             % they are noisy and thus the ripples detected in them should not be considered in the ripples merging process). \
             % This field is optional.
             % microMontageFileName – the file name (including path) of the micromontage.
-            % MicroDataFolder – The folder in which the raw micro data is stored. The property fileNamePrefix of the class includes the prefix for the data 
+            % MicroDataFolder – The folder in which the raw micro data is stored. The property fileNamePrefix of the class includes the prefix for the data
             % filenames (by default: ‘CSC’).
-            % MicroRipplesFileNames – name (including path) of the ripple mat files in which the ripple times for the micro channels should be saved. The 
+            % MicroRipplesFileNames – name (including path) of the ripple mat files in which the ripple times for the micro channels should be saved. The
             % method will save ripples per channel as MicroRipplesFileNames<#channel index> and ripples per area as MicroRipplesFileNames<area name>.
-            % MicroSpikesFileNames – The filenames (including path) of the mat files that include the spike times. The method assumes the filename format is 
-            % SpikesFileNames<#area_name>. That means that for the detection of all the ripples on micro channels in the RAH area (for example) the same spikes 
+            % MicroSpikesFileNames – The filenames (including path) of the mat files that include the spike times. The method assumes the filename format is
+            % SpikesFileNames<#area_name>. That means that for the detection of all the ripples on micro channels in the RAH area (for example) the same spikes
             % file is loaded with the name <MicroSpikesFileNames>RAH.mat.
             % sleepScoringFileName – file name (including path) of the sleep scoring mat file. If not provided all the data will be used.
-
+            
             
             if nargin < 3 || isempty(runByChannel)
                 runByChannel = false;
@@ -1166,7 +1172,7 @@ classdef RippleDetector < handle
             end
             
             rd = RippleDetector;
-             
+            
             %go over the patients
             nPatients = length(runData);
             for iPatient=1:nPatients
@@ -1202,7 +1208,7 @@ classdef RippleDetector < handle
                     
                     nAreas = length(areasToRunOn);
                     for iArea = 1:nAreas
-                        currArea = areasToRunOn{iArea};                        
+                        currArea = areasToRunOn{iArea};
                         disp(['area ',currArea,' ',num2str(iArea)','/',num2str(nAreas)]);
                         
                         %find micro channels indices
@@ -1244,7 +1250,7 @@ classdef RippleDetector < handle
                                     ripplesStartEndAll{iChan} = [];
                                 end
                             end
-                 
+                            
                             try
                                 currData = load([runData(iPatient).MicroDataFolder,'\',obj.dataFilePrefix ,num2str(currChan),'.mat']);
                                 currData = currData.data;
@@ -1301,27 +1307,27 @@ classdef RippleDetector < handle
         end
         
         function plotRipplesMicro(obj, runData, areaName, folderToSave)
-            % The method plots ripples detected on micro channels. Ripple for single micro channels should be detected and 
-            % saved in advance. The method loads ripples for single micro channels in the area, merges them and plots all 
-            % the single ripples in figures where each column is a channel and each row is a ripple. Red circles appear in 
-            % all the channels for which a ripple was detected – i.e. each row should have at least two red circles as only 
+            % The method plots ripples detected on micro channels. Ripple for single micro channels should be detected and
+            % saved in advance. The method loads ripples for single micro channels in the area, merges them and plots all
+            % the single ripples in figures where each column is a channel and each row is a ripple. Red circles appear in
+            % all the channels for which a ripple was detected – i.e. each row should have at least two red circles as only
             % ripples that are detected in at least two channels are
-            % considered legitimate. . It’s also possible to disregard some of the channels (if they are noisy) by adding 
-            % them to the field 
+            % considered legitimate. . It’s also possible to disregard some of the channels (if they are noisy) by adding
+            % them to the field
             % It receives as input:
             % A. runData – a struct containing the fields:
             % patientName
             % microMontageFileName – the file name (including path) of the micromontage.
-            % MicroDataFolder – folder from which to read the micro data (the method assumes the prefix for the 
+            % MicroDataFolder – folder from which to read the micro data (the method assumes the prefix for the
             % files is CSC, can be changed by the property dataFilePrefix)
-            % MicroRipplesFileNames – name (including path) of the ripple mat files in which the ripple times for the micro 
+            % MicroRipplesFileNames – name (including path) of the ripple mat files in which the ripple times for the micro
             % channels are saved (the method assumes the name of the file is MicroRipplesFileNames<#channel index>
-            % noisyChannels – a list of micro channels that should be disregarded in the ripples detection process (i.e. 
+            % noisyChannels – a list of micro channels that should be disregarded in the ripples detection process (i.e.
             % they are noisy and thus the ripples detected in them should not be considered in the ripples merging process). \
             % This field is optional.
             % B. areaName – name of the area (as appears in the micro montage) to plot the ripples for.
             % C. folderToSave (optional) – folder into which to save the figures.
-
+            
             
             if nargin < 4 || isempty(folderToSave)
                 toSave = false;
@@ -1375,7 +1381,7 @@ classdef RippleDetector < handle
             end
             
             [rippleTimesMerged,~] = obj.getRipplesFromAllMicroElectrodesInArea(ripplesTimes, ripplesStartEnd);
-
+            
             nRipples = length(rippleTimesMerged);
             nPlots = ceil(nRipples/obj.nInPlotMicro);
             
@@ -1415,9 +1421,9 @@ classdef RippleDetector < handle
                     end
                 end
                 if toSave
-                        set(f, 'Position', get(0, 'Screensize'));
-                        saveas(f, [folderToSave,'\',runData.patientName,'_',areaName,'_all_ripples_' num2str(figInd),'.jpg']);
-                        close(f);
+                    set(f, 'Position', get(0, 'Screensize'));
+                    saveas(f, [folderToSave,'\',runData.patientName,'_',areaName,'_all_ripples_' num2str(figInd),'.jpg']);
+                    close(f);
                 else
                     pause;
                 end
@@ -1428,20 +1434,20 @@ classdef RippleDetector < handle
         end
         
         function results = runRipSpikesMicro(obj, runData, fileNameResults)
-            % This method is the same as runRipSpikes except it uses ripple times as detected on micro channels, and not 
+            % This method is the same as runRipSpikes except it uses ripple times as detected on micro channels, and not
             % macro channels. See documentation for runRipSpikes for more details.
-            % Ripple detection on micro channels is performed for an entire area rather than just one channel – see the 
-            % documentation on getRipplesFromMicroElectrodesInArea for more details. Because the detection is per area and 
-            % not per channel, the difference from runRipSpikes is in that the struct runData instead of a field 
-            % channelsToRunOn there should be a field ‘areasToRunOn’. If this field doesn’t exist or is empty the method 
+            % Ripple detection on micro channels is performed for an entire area rather than just one channel – see the
+            % documentation on getRipplesFromMicroElectrodesInArea for more details. Because the detection is per area and
+            % not per channel, the difference from runRipSpikes is in that the struct runData instead of a field
+            % channelsToRunOn there should be a field ‘areasToRunOn’. If this field doesn’t exist or is empty the method
             % will try to run on all areas for that patient according to the micro montages.
             % Two more differences in the input runData struct, it should have the fields:
-            % microMontageFileName - the file name (including path) of the micromontage (this is tinstead of 
+            % microMontageFileName - the file name (including path) of the micromontage (this is tinstead of
             % macroMontageFileName).
-            % MicroRipplesFileNames - name (including path) of the ripple mat files in which the ripple times for the 
-            % micro channels are saved (the method assumes the name of the file is MicroRipplesFileNames <#channel index>). 
+            % MicroRipplesFileNames - name (including path) of the ripple mat files in which the ripple times for the
+            % micro channels are saved (the method assumes the name of the file is MicroRipplesFileNames <#channel index>).
             % This is instead of RipplesFileNames.
-
+            
             
             if nargin < 3
                 fileNameResults = '';
@@ -1468,7 +1474,7 @@ classdef RippleDetector < handle
                 microMontage = load(runData(iPatient).microMontageFileName);
                 microMontage = microMontage.Montage;
                 allAreas = {microMontage.Area};
-%                 allChans = [microMontage.Channel];
+                %                 allChans = [microMontage.Channel];
                 
                 %load spike data
                 try
@@ -1541,7 +1547,7 @@ classdef RippleDetector < handle
                         disp([runData(iPatient).MicroRipplesFileNames,currArea,'.mat doesn''t exist']);
                         continue;
                     end
-                                        
+                    
                     ripplesBeforeStimInds = ripplesTimes<firstStim-obj.windowSpikeRateAroundRip;
                     %                     tmp = ripplesTimes>=firstStim&ripplesTimes<=stimTimes(end);
                     %only ripples that are short and mid effect and not too
@@ -1671,14 +1677,14 @@ classdef RippleDetector < handle
             % The output of runRipSpikes can be plotted using this method.
             % It receives the results struct (the output of runRipSpikes) and folderToSave (optional) for saving the figures.
             
-            % The figures per channel show the spike rate for ripple vs control before and during stimulations per 
-            % single/multi unit and for the average of units. They also show the stimulation triggered spike rate per unit 
-            % and the spike rate for the entire session per unit. This method also calculates the pvalue of the comparison 
-            % between the presented conditions (ripple vs control or before vs stimulations), using the average over the 
+            % The figures per channel show the spike rate for ripple vs control before and during stimulations per
+            % single/multi unit and for the average of units. They also show the stimulation triggered spike rate per unit
+            % and the spike rate for the entire session per unit. This method also calculates the pvalue of the comparison
+            % between the presented conditions (ripple vs control or before vs stimulations), using the average over the
             % event-triggered window, the window size is defined by windowForSignificance.
-            % The maximal number of units shown in the single units figure is set by maxLinesInFigureRipSpike. 
+            % The maximal number of units shown in the single units figure is set by maxLinesInFigureRipSpike.
             % The purple in the spike rate figures represent stimulation spochs.
-
+            
             
             if nargin < 3 || isempty(folderToSave)
                 toSave = false;
@@ -1698,8 +1704,8 @@ classdef RippleDetector < handle
                 
                 for iChan = 1:nChans
                     
-%                     ymin = inf;
-%                     ymax = -inf;
+                    %                     ymin = inf;
+                    %                     ymax = -inf;
                     nUnits = length(results(iPatient).resultsPerChan(iChan).spikeTimes);
                     if nUnits==0
                         continue;
@@ -1994,7 +2000,7 @@ classdef RippleDetector < handle
                         end
                     else
                         title('No Data');
-
+                        
                     end
                     
                     %                     subplot(2,2,1);
@@ -2059,12 +2065,12 @@ classdef RippleDetector < handle
                         
                         for iFigure = 1:nFiguresForSingle
                             set(fs{iFigure}, 'Position', get(0, 'Screensize'));
-                            saveas(fs{iFigure},[folderToSave,'\',results(iPatient).patientName,filename, num2str(results(iPatient).resultsPerChan(iChan).channelNum) '_',num2str(iFigure),'.jpg']);
+                            saveas(fs{iFigure},[folderToSave,'\',filename, num2str(results(iPatient).resultsPerChan(iChan).channelNum) '_',num2str(iFigure),'.jpg']);
                             close(fs{iFigure});
                         end
                         
                         set(fs{end}, 'Position', get(0, 'Screensize'));
-                        saveas(fs{end},[folderToSave,'\',results(iPatient).patientName,'\ripple_spikes_avg_units_' num2str(results(iPatient).resultsPerChan(iChan).channelNum),'.jpg']);
+                        saveas(fs{end},[folderToSave,'\','ripple_spikes_avg_units_' num2str(results(iPatient).resultsPerChan(iChan).channelNum),'.jpg']);
                         close(fs{end});
                     end
                     
@@ -2075,7 +2081,7 @@ classdef RippleDetector < handle
         
         function plotResultsRipplesData(obj, results, folderToSave)
             
-            %The method receives as input a struct with the format of the output of runRipplesData and produces figures. 
+            %The method receives as input a struct with the format of the output of runRipplesData and produces figures.
             %The input folderToSave (optional) sets the folder into which the figures will be saved.
             
             if nargin < 3 || isempty(folderToSave)
@@ -2283,6 +2289,6 @@ classdef RippleDetector < handle
             end
         end
     end
-    end
-
 end
+
+
