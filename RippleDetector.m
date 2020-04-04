@@ -63,6 +63,7 @@ classdef RippleDetector < handle
         %plotting constants
         nBinsHist = 10;
         maxLinesInFigureRipSpike = 4;
+        maxColumnsInFigureDataMicro = 4;
         
         winFromLastSpike = 1000; %ms
         shortTimeRangeAfterStim = 3;%seconds
@@ -794,6 +795,441 @@ classdef RippleDetector < handle
                 end
                 
                 results(iPatient).resultsPerChan = resultsPerChan;
+            end
+            
+            if ~isempty(fileNameResults)
+                save(fileNameResults,'results');
+            end
+            
+        end
+        
+        function results = runRippleDataMicro(obj, runData, fileNameResults)
+            
+            % The method produces information about the ripples in micro channels. The ripples that participate in the analysis per channel are only ripples for which 
+            % a ripple occurred in at least another channel at the same time (i.e. only ripples that occur during the area-ripples which are based on single channel 
+            % “votes” of at least two channels). Contrary to runRippleData, all the ripples through the night are analyzed together, without division to night stages. 
+            % The analysis includes per channel:
+            % A. Average ripple.
+            % B. Spectrum of average.
+            % C. Average of TFR around ripple.
+            %
+            % The same analysis is also conducted for the pool of all the ripples for all the channels together (again, only ripples that contributed to the voted 
+            % area-ripples):
+            % A. Average ripple.
+            % B. Spectrum of average.
+            % C. Average of TFR around ripple.
+            % In addition, the ripple triggered TFR of the neared macro channel in the spindles range is also produced. The ripples used for producing this are the area 
+            % ripples (not the pool of all ripples like the analysis mentioned in the previous paragraph).
+            %
+            % The input runData is a struct in the length of number of patients (for which the analysis is required). In addition it receives the input parameter 
+            % fileNameResults which includes the file name into which the results will be saved (optional).
+            % Each element (=patient) in runData should include the fields:
+            % patientName
+            % areasToRunOn – a list of areas for which the analysis will be performed.
+            % noisyChannels – a list of micro channels that should be disregarded (optional).
+            % microMontageFileName – the file name (including path) of the micromontage.
+            % MicroDataFolder – The folder in which the raw micro data is stored. The property fileNamePrefix of the class includes the prefix for the data filenames 
+            % (by default: ‘CSC’).
+            % MicroRipplesFileNames – name (including path) of the ripple mat files in which the ripple times for the micro channels should be saved. The method will 
+            % load ripples per channel assuming their filename is MicroRipplesFileNames<#channel index> and ripples per area as MicroRipplesFileNames<area name>.
+            % DataFolder – The folder in which the raw data files are saved (the method assumes the prefix for the files is CSC, can be changed by the property 
+            % dataFilePrefix).
+            % macroMontageFileName - the file name (including path) of the macromontage.
+            %
+            % The output struct ‘results’ includes all the results of the analysis, which can then be plotted using plotResultsRipplesDataMicro. The output struct is 
+            % a struct with the length of the number of patients (=the length of runData), where each element includes:
+            % patientName
+            % resultsPerArea – a struct in the length of the number of areas required for the analysis per the patient. Each element in resultsPerArea includes the 
+            % fields:
+            % area
+            % microChans – list of micro channels in area
+            % macr1Chan – index of nearest macro channel
+            % nRipplesArea – number of area-ripples (ripples detected based on single channels vote)
+            % nRipples – an array with the length as the number of channels in the area where each element is the number of ripples that participated in the 
+            % area-ripples per channel
+            % avgRipple – a cell array with the length as the number of channels in the area where each element is the average ripple per channel
+            % avgRippleAll – average over pooled ripples (pooled ripples from all the channels)
+            % stdRipple – a cell array with the length as the number of channels in the area where each element is the std of the ripple per channel
+            % stdRippleAll – std over pooled ripples (pooled ripples from all the channels)
+            % specRipple – a cell array with the length as the number of channels in the area where each element is the spectrum of the average ripple per channel
+            % specRipple All – spectrum of the average ripple over pooled ripples (pooled ripples from all the channels)
+            % meanTFRipple - a cell array with the length as the number of channels in the area where each element is the average ripple triggered TFR per channel
+            % meanTFRAll – average of the ripple triggered TFR over all ripples (pooled ripples from all the channels)
+            % meanTFRofMacroAtRip – ripple triggered TFR of the nearest macro channel in spindle frequency range, the ripples used for producing this are the 
+            % area-ripples
+            
+            if nargin < 3
+                fileNameResults = '';
+            end
+            
+            shortTimeRangeAfterStim = obj.shortTimeRangeAfterStim*obj.samplingRate;
+            midTimeRangeAfterStim = obj.midTimeRangeAfterStim*obj.samplingRate;
+            stimulusDuration = obj.stimulusDuration*obj.samplingRate/1000;
+            avgRippleBeforeAfter = obj.avgRippleBeforeAfter*obj.samplingRate;
+            timeWin = min((1./obj.freqRangeForAvgSpec)*obj.minNCycles,ones(size(obj.freqRangeForAvgSpec))*obj.minWinSizeSpec);
+            
+            nPatients = length(runData);
+            
+            %go over all required patients
+            for iPatient = 1:nPatients
+                disp(['Patient ',runData(iPatient).patientName,' ',num2str(iPatient),'/',num2str(nPatients)]);
+                results(iPatient).patientName = runData(iPatient).patientName;
+                
+                %load exp data for stimulation timings
+%                 expData = load(runData(iPatient).ExpDataFileName);
+%                 expData = expData.EXP_DATA;
+%                 stimTimes = expData.stimTiming.validatedTTL_NLX;
+%                 firstStim = stimTimes(1);
+                
+                %load sleep scoring
+%                 if isfield(runData(iPatient), 'sleepScoringFileName') && ~isempty(runData(iPatient).sleepScoringFileName)
+%                     try
+%                         sleepScoring = load(runData(iPatient).sleepScoringFileName);
+%                         sleepScoring = sleepScoring.sleep_score_vec;
+%                     catch
+%                         disp([runData(iPatient).sleepScoringFileName '.mat doesn''t exist']);
+%                         sleepScoring = [];
+%                     end
+%                 end
+                
+                %load macro montage
+                macroMontage = load(runData(iPatient).macroMontageFileName);
+                macroMontage = macroMontage.MacroMontage;
+                
+                %load micro montage
+                microMontage = load(runData(iPatient).microMontageFileName);
+                microMontage = microMontage.Montage;
+                
+                %get areas and chans list macro and micro
+                allAreasMacro = {macroMontage.Area};
+                allChansMacro = [macroMontage.Channel];
+                allAreasMicro = {microMontage.Area};
+                allChansMicro = [microMontage.Channel];
+                
+                %go over required channels per patient
+                resultsPerArea = [];
+                nAreas = length(runData(iPatient).areasToRunOn);
+                for iArea = 1:nAreas
+                    currArea = runData(iPatient).areasToRunOn{iArea};
+                    resultsPerArea(iArea).area = currArea;
+                    
+                    disp(['area ',currArea,' ',num2str(iArea),'/',num2str(nAreas)]);
+                    
+                    %find closest macro channel (macro-1 in area)
+                    currChansMacro = allChansMacro(strcmp(allAreasMacro,currArea));
+                    currChansMicro = allChansMicro(strcmp(allAreasMicro,currArea));
+                    if isfield(runData(iPatient), 'noisyChannels') && ~isempty(runData(iPatient).noisyChannels)
+                        currChansMicro = currChansMicro(~ismember(currChansMicro,runData(iPatient).noisyChannels));
+                    end
+                    
+                    macro1chan = min(currChansMacro);
+                    resultsPerArea(iArea).microChans = currChansMicro;
+                    resultsPerArea(iArea).macro1Chan = macro1chan;
+                                        
+                    %load the micro data
+                    nMicroChans = length(currChansMicro);
+                    datas = cell(1,nMicroChans);
+                    for iChan = 1:nMicroChans
+                        try
+                            datas{iChan} = [runData(iPatient).MicroDataFolder '\' obj.dataFilePrefix num2str(currChansMicro(iChan)) '.mat'];
+                            datas{iChan} = load(datas{iChan});
+                            datas{iChan} = datas{iChan}.data;
+                        catch
+                            disp([runData(iPatient).MicroDataFolder '\' obj.dataFilePrefix num2str(currChansMicro(iChan)) '.mat doesn''t exist']);
+                            continue;
+                        end
+                    end
+                    
+                    try
+                        macroData = [runData(iPatient).DataFolder '\' obj.dataFilePrefix num2str(macro1chan) '.mat'];
+                        macroData = load(macroData);
+                        macroData = macroData.data;
+                    catch
+                        disp([runData(iPatient).MicroDataFolder '\' obj.dataFilePrefix num2str(macro1chan) '.mat doesn''t exist']);
+                        continue;
+                    end
+                    
+                    %load IIS times
+%                     if isfield(runData(iPatient), 'MicroSpikesFileNames') && ~isempty(runData(iPatient).MicroSpikesFileNames)
+%                         try
+%                             IIStimes = [runData(iPatient).MicroSpikesFileNames currArea '.mat'];
+%                             IIStimes = load(IIStimes);
+%                             IIStimes = IIStimes.peakTimes;
+%                         catch
+%                             disp([runData(iPatient).MicroSpikesFileNames currArea '.mat doesn''t exist']);
+%                             IIStimes = [];
+%                         end
+%                     else
+%                         IIStimes = [];
+%                     end
+                    
+                    %load ripples per area and per micro channel
+                    if isfield(runData(iPatient), 'MicroRipplesFileNames') && ~isempty(runData(iPatient).MicroRipplesFileNames)
+                        try
+                            ripplesData = [runData(iPatient).MicroRipplesFileNames currArea '.mat'];
+                            ripplesData = load(ripplesData);
+                            ripplesTimesArea = ripplesData.ripplesTimes;
+                        catch
+                            disp([runData(iPatient).MicroRipplesFileNames currArea '.mat doesn''t exist']);
+                            ripplesTimesArea = [];
+                        end
+                        rippleTimesLog = cell(1,nMicroChans);
+                        for iChan = 1:nMicroChans
+                            try
+                                currTimes = [runData(iPatient).MicroRipplesFileNames num2str(currChansMicro(iChan)) '.mat'];
+                                currTimes = load(currTimes);
+                                currTimes = currTimes.ripplesTimes;
+                                rippleTimesLog{iChan} = zeros(1,max(currTimes));
+                                rippleTimesLog{iChan}(currTimes) = 1;
+                            catch
+                                disp([runData(iPatient).MicroRipplesFileNames num2str(currChansMicro(iChan)) '.mat doesn''t exist']);
+                                rippleTimesLog{iChan} = [];
+                            end
+                        end
+                    else
+                        ripplesTimesArea = [];
+                    end
+                    
+                    resultsPerArea(iArea).nRipplesArea = length(ripplesTimesArea);
+                    
+                    %load spindles
+                    if isfield(runData(iPatient), 'SpindlesFileNames') && ~isempty(runData(iPatient).SpindlesFileNames)
+                        try
+                            spindlesTimes = [runData(iPatient).SpindlesFileNames num2str(macro1chan) '.mat'];
+                            spindlesTimes = load(spindlesTimes);
+                            spindlesTimes = spindlesTimes.spindlesTimes;
+                        catch
+                            disp([runData(iPatient).SpindlesFileNames num2str(macro1chan) '.mat doesn''t exist']);
+                            spindlesTimes = [];
+                        end
+                    end
+                    
+                    %leave only ripples that "participated" in the area
+                    %ripples list
+                    
+                    ripplesTimesChan = cell(1,nMicroChans);
+                    %go over the area ripples list and find ripples that
+                    %"contributed" to its vote
+                    for iRipple = 1:length(ripplesTimesArea)
+                        for iChan = 1:nMicroChans
+                            minInd = max(ripplesTimesArea(iRipple)-obj.ripplesDistMicrChanForMerge,1);
+                            maxInd = min(ripplesTimesArea(iRipple)+obj.ripplesDistMicrChanForMerge,length(rippleTimesLog{iChan}));
+                            
+                            if minInd<length(rippleTimesLog{iChan})
+                                currRippleTime = minInd-1+find(rippleTimesLog{iChan}(minInd:maxInd));
+                            else
+                                currRippleTime = [];
+                            end
+                            
+                            if ~isempty(currRippleTime)
+                                ripplesTimesChan{iChan} = [ripplesTimesChan{iChan} currRippleTime];
+                            end
+                        end
+                    end
+
+                    %get inds of ripples that are short and mid effect and not too
+                    %close to the stimulus
+%                     dataDuration = stimTimes(end)+midTimeRangeAfterStim;
+%                     stimInds = zeros(1,dataDuration);
+%                     %short effect
+%                     for iStim = 1:length(stimTimes)
+%                         stimInds(stimTimes(iStim)+stimulusDuration:stimTimes(iStim)+shortTimeRangeAfterStim) = 1;
+%                     end
+%                     %add also mid effect
+%                     stimDiffs = diff(stimTimes);
+%                     stimIndsWithMidPauseAfter = [find(stimDiffs >= midTimeRangeAfterStim) length(stimTimes)];
+%                     stimIndsWithMidPauseAfterTimes = stimTimes(stimIndsWithMidPauseAfter);
+%                     for iStim = 1:length(stimIndsWithMidPauseAfter)
+%                         stimInds(stimIndsWithMidPauseAfterTimes(iStim)+shortTimeRangeAfterStim:stimIndsWithMidPauseAfterTimes(iStim)+midTimeRangeAfterStim) = 1;
+%                     end
+                    
+%                     resultsPerArea(iArea).nRipplesBefore = zeros(1,nMicroChans);
+%                     resultsPerArea(iArea).nRipplesStim = zeros(1,nMicroChans);
+%                     resultsPerArea(iArea).avgBefore = cell(1,nMicroChans);
+%                     resultsPerArea(iArea).avgStim = cell(1,nMicroChans);
+%                     resultsPerArea(iArea).stdBefore = cell(1,nMicroChans);
+%                     resultsPerArea(iArea).stdStim = cell(1,nMicroChans);
+%                     resultsPerArea(iArea).specBefore = cell(1,nMicroChans);
+%                     resultsPerArea(iArea).specStim = cell(1,nMicroChans);
+%                     resultsPerArea(iArea).meanTFRRipBefore = cell(1,nMicroChans);
+%                     resultsPerArea(iArea).meanTFRRipStim = cell(1,nMicroChans);
+                    
+                    resultsPerArea(iArea).nRipples = zeros(1,nMicroChans);
+                    resultsPerArea(iArea).avgRipple = cell(1,nMicroChans);
+                    resultsPerArea(iArea).stdRipple = cell(1,nMicroChans);
+                    resultsPerArea(iArea).specRipple = cell(1,nMicroChans);
+                    resultsPerArea(iArea).meanTFRRipple = cell(1,nMicroChans);
+                    
+                    allRipples = [];
+                    
+                    for iChan = 1:nMicroChans
+                        
+                        %indices of ripples before stimulations
+                        %                         ripplesBeforeInds = ripplesTimesChan{iChan}<firstStim-obj.windowSpikeRateAroundRip;
+                        %                         ripplesIndsLog = zeros(1,dataDuration);
+                        %                         ripplesIndsLog(ripplesTimesChan{iChan}(ripplesTimesChan{iChan}<=dataDuration)) = 1;
+                        %                         %inds of short and mid effect ripples
+                        %                         ripplesDuringStimInds = ismember(ripplesTimesChan{iChan},find(ripplesIndsLog & stimInds));
+                        %
+                        %                         %calculate average ripples and TFRs
+                        %                         ripplesTimesBefore = ripplesTimesChan{iChan}(ripplesBeforeInds);
+                        %                         nRipplesBefore = length(ripplesTimesBefore);
+                        %
+                        %                         ripplesTimesStim = ripplesTimesChan{iChan}(ripplesDuringStimInds);
+                        %                         nRipplesStim = length(ripplesTimesStim);
+                        
+                        nRipples = length(ripplesTimesChan{iChan});
+                        
+                        %calculate average of ripples
+%                         ripplesBefore = zeros(nRipplesBefore,length([-avgRippleBeforeAfter:avgRippleBeforeAfter]));
+%                         ripplesStim = zeros(nRipplesStim,length([-avgRippleBeforeAfter:avgRippleBeforeAfter]));
+                        chanRipples = zeros(nRipples,length([-avgRippleBeforeAfter:avgRippleBeforeAfter]));
+                        
+                        for iRipple = 1:nRipples
+                            chanRipples(iRipple,:) = datas{iChan}(ripplesTimesChan{iChan}(iRipple)-avgRippleBeforeAfter:ripplesTimesChan{iChan}(iRipple)+avgRippleBeforeAfter);
+                        end
+                        if ~isempty(chanRipples)
+                            avgRipple = nanmean(chanRipples);
+                            stdRipple = nanstd(chanRipples);
+                            %spectrum of average
+                            specRipple = ft_specest_mtmfft(avgRipple,[1:length(avgRipple)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
+                            specRipple = abs(squeeze(specRipple(1,1,:,:)));
+                        else
+                            avgRipple = nan(1,size(chanRipples,2));
+                            stdRipple = nan(1,size(chanRipples,2));
+                            specRipple = nan(length(obj.freqoiForAvgSpec),1);
+                        end
+                        allRipples = [allRipples; chanRipples];
+                        
+%                         %before stimulations
+%                         for iRipple = 1:nRipplesBefore
+%                             ripplesBefore(iRipple,:) = data(ripplesTimesBefore(iRipple)-avgRippleBeforeAfter:ripplesTimesBefore(iRipple)+avgRippleBeforeAfter);
+%                         end
+%                         if ~isempty(ripplesBefore)
+%                             avgBefore = nanmean(ripplesBefore);
+%                             stdBefore = nanstd(ripplesBefore);
+%                             %spectrum of average
+%                             specBefore = ft_specest_mtmfft(avgBefore,[1:length(avgBefore)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
+%                             specBefore = abs(squeeze(specBefore(1,1,:,:)));
+%                         else
+%                             avgBefore = nan(1,size(ripplesBefore,2));
+%                             stdBefore = nan(1,size(ripplesBefore,2));
+%                             specBefore = nan(length(obj.freqoiForAvgSpec),1);
+%                         end
+%                         
+%                         %after stimulations
+%                         for iRipple = 1:nRipplesStim
+%                             ripplesStim(iRipple,:) = data(ripplesTimesStim(iRipple)-avgRippleBeforeAfter:ripplesTimesStim(iRipple)+avgRippleBeforeAfter);
+%                         end
+%                         if ~isempty(ripplesStim)
+%                             avgStim = nanmean(ripplesStim);
+%                             stdStim = nanstd(ripplesStim);
+%                             specStim = ft_specest_mtmfft(avgStim,[1:length(avgStim)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
+%                             specStim = abs(squeeze(specStim(1,1,:,:)));
+%                         else
+%                             avgStim = nan(1,size(ripplesStim,2));
+%                             stdStim = nan(1,size(ripplesStim,2));
+%                             specStim = nan(1,length(obj.freqoiForAvgSpec));
+%                         end
+                        
+                        %get ripple centered TFRs (implemented in
+                        %PACCalculator)
+                        pacCalc = PACCalculator;
+                        pacCalc.freqRange = obj.freqRangeForAvgSpec;
+                        pacCalc.timeBeforeAfterEvent = obj.timeBeforeAfterEventRipSpec; %seconds
+                        pacCalc.timeForBaseline = obj.timeForBaselineRip; %seconds, from Starestina et al
+                        pacCalc.minNCycles = obj.minNCycles;
+                        
+%                         meanTFRRipBefore = pacCalc.plotAvgSpecDiff(datas{iChan}, ripplesTimesBefore);
+%                         meanTFRRipStim = pacCalc.plotAvgSpecDiff(datas{iChan}, ripplesTimesStim);
+                        meanTFRRipple = pacCalc.plotAvgSpecDiff(datas{iChan}, ripplesTimesChan{iChan});
+                        
+                        resultsPerArea(iArea).nRipples(iChan) = nRipples;
+                        
+                        resultsPerArea(iArea).avgRipple{iChan} = avgRipple;
+                        resultsPerArea(iArea).stdRipple{iChan} = stdRipple;
+                        resultsPerArea(iArea).specRipple{iChan} = specRipple;
+                        resultsPerArea(iArea).meanTFRRipple{iChan} = meanTFRRipple;
+                        
+%                         resultsPerArea(iArea).nRipplesBefore(iChan) = nRipplesBefore;
+%                         resultsPerArea(iArea).nRipplesStim(iChan) = nRipplesStim;
+%                         
+%                         resultsPerArea(iArea).avgBefore{iChan} = avgBefore;
+%                         resultsPerArea(iArea).avgStim{iChan} = avgStim;
+%                         resultsPerArea(iArea).stdBefore{iChan} = stdBefore;
+%                         resultsPerArea(iArea).stdStim{iChan} = stdStim;
+%                         resultsPerArea(iArea).specBefore{iChan} = specBefore;
+%                         resultsPerArea(iArea).specStim{iChan} = specStim;
+%                         resultsPerArea(iArea).meanTFRRipBefore{iChan} = meanTFRRipBefore;
+%                         resultsPerArea(iArea).meanTFRRipStim{iChan} = meanTFRRipStim;
+                        
+                        %get spindle-ripple coupling (SI angles and spectrum) for before the stimluations -
+                        %implemented in AnalyzeCoupling
+                        %                     ac = AnalyzeCoupling;
+                        %                     spindlesBefore = spindlesTimes(spindlesTimes<firstStim-ac.timeBeforeAfterEventSpRip*obj.samplingRate);
+                        %                     detections.slowWavesTimes = [];
+                        %                     detections.spindlesTimes = spindlesBefore;
+                        %                     detections.ripplesTimes = [];
+                        %                     ac.freqRangeSpRip = obj.freqRangeSpRip;
+                        %                     [~, SIanglesSpRip, rs, vs, meanSpecs, meanEpochs ~, nEpochs] = ac.analyzeUsingSpectrumsAndSIIndex(data, data, {IIStimes,IIStimes}, sleepScoring, detections, [], true, false, true);
+                        %
+                        %                     resultsPerChan(iChan).SIanglesSpRip = SIanglesSpRip;
+                        %                     resultsPerChan(iChan).r = rs(2);
+                        %                     resultsPerChan(iChan).v = vs(2);
+                        %                     resultsPerChan(iChan).meanSpecs = meanSpecs{2};
+                        %                     resultsPerChan(iChan).meanEpochs = meanEpochs{2};
+                        %                     resultsPerChan(iChan).nEpochs = nEpochs{2};
+                    end
+                    
+                    %calculate parameters for all ripples together
+                    avgRipple = nanmean(allRipples);
+                    stdRipple = nanstd(allRipples);
+                    %spectrum of average
+                    specRipple = ft_specest_mtmfft(avgRipple,[1:length(avgRipple)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
+                    specRipple = abs(squeeze(specRipple(1,1,:,:)));
+                    
+                    resultsPerArea(iArea).nRipplesAll = sum(resultsPerArea(iArea).nRipples);
+                    resultsPerArea(iArea).avgRippleAll = avgRipple;
+                    resultsPerArea(iArea).stdRippleAll = stdRipple;
+                    resultsPerArea(iArea).specRippleAll = specRipple;
+                    
+                    meanTFRAll = zeros(size(resultsPerArea(iArea).meanTFRRipple{1}));
+                    for iChan = 1:nMicroChans
+                        meanTFRAll = meanTFRAll+resultsPerArea(iArea).nRipples(iChan)*resultsPerArea(iArea).meanTFRRipple{iChan};
+                    end
+                    meanTFRAll = meanTFRAll./resultsPerArea(iArea).nRipplesAll;
+                    resultsPerArea(iArea).meanTFRAll = meanTFRAll;
+                    
+                    %indices of ripples before stimulations
+%                     ripplesBeforeInds = ripplesTimesArea<firstStim-obj.windowSpikeRateAroundRip;
+%                     ripplesIndsLog = zeros(1,dataDuration);
+%                     ripplesIndsLog(ripplesTimesArea(ripplesTimesArea<=dataDuration)) = 1;
+%                     %inds of short and mid effect ripples
+%                     ripplesDuringStimInds = ismember(ripplesTimesArea,find(ripplesIndsLog & stimInds));
+%                     
+%                     %calculate average ripples and TFRs
+%                     ripplesTimesBefore = ripplesTimesArea(ripplesBeforeInds);                    
+%                     ripplesTimesStim = ripplesTimesArea(ripplesDuringStimInds);
+                    
+                    %get ripple centered TFRs of the macro channel (implemented in
+                    %PACCalculator)
+                    pacCalc = PACCalculator;
+                    pacCalc.freqRange = obj.freqRangeForShowingSpindles;
+                    pacCalc.timeBeforeAfterEvent = obj.timeBeforeAfterEventRipSpec; %seconds
+                    pacCalc.timeForBaseline = obj.timeForBaselineRip; %seconds, from Starestina et al
+                    pacCalc.minNCycles = obj.minNCycles;
+                    
+%                     meanTFRofMacroRipBefore = pacCalc.plotAvgSpecDiff(macroData, ripplesTimesBefore);
+%                     meanTFRofMacroRipStim = pacCalc.plotAvgSpecDiff(macroData, ripplesTimesStim);
+                    meanTFRofMacroAtRip = pacCalc.plotAvgSpecDiff(macroData, ripplesTimesArea);
+                    
+                    resultsPerArea(iArea).meanTFRofMacroAtRip = meanTFRofMacroAtRip;
+%                     resultsPerArea(iArea).meanTFRofMacroRipBefore = meanTFRofMacroRipBefore;
+%                     resultsPerArea(iArea).meanTFRofMacroRipStim = meanTFRofMacroRipStim;
+                    
+                end
+                
+                results(iPatient).resultsPerArea = resultsPerArea;
             end
             
             if ~isempty(fileNameResults)
@@ -1628,9 +2064,9 @@ classdef RippleDetector < handle
                     end
                 end
                 if toSave
-                        set(f, 'Position', get(0, 'Screensize'));
-                        saveas(f, [folderToSave,'\',runData.patientName,'_',areaName,'_all_ripples_' num2str(figInd),'.jpg']);
-                        close(f);
+                    set(f, 'Position', get(0, 'Screensize'));
+                    saveas(f, [folderToSave,'\',runData.patientName,'_',areaName,'_all_ripples_' num2str(figInd),'.jpg']);
+                    close(f);
                 else
                     pause;
                 end
@@ -2271,6 +2707,9 @@ classdef RippleDetector < handle
                         end
                         
                         set(fs{end}, 'Position', get(0, 'Screensize'));
+                        if ~isfolder([folderToSave,'\',results(iPatient).patientName])
+                            mkdir([folderToSave,'\',results(iPatient).patientName]);
+                        end
                         saveas(fs{end},[folderToSave,'\',results(iPatient).patientName,'\ripple_spikes_avg_units_' num2str(results(iPatient).resultsPerChan(iChan).channelNum),'.jpg']);
                         close(fs{end});
                     end
@@ -2425,7 +2864,136 @@ classdef RippleDetector < handle
                     
                     if toSave
                         set(f1, 'Position', get(0, 'Screensize'));
+                        if ~isfolder([folderToSave,'\',results(iPatient).patientName])
+                            mkdir([folderToSave,'\',results(iPatient).patientName]);
+                        end
                         saveas(f1,[folderToSave,'\',results(iPatient).patientName,'\ripple_channel_data_' num2str(results(iPatient).resultsPerChan(iChan).channelNum),'.jpg']);
+                        close(f1);
+                    end
+                end
+            end
+        end
+        
+        function plotResultsRipplesDataMicro(obj, results, folderToSave)
+            
+            %The method receives as input a struct with the format of the output of runRipplesDataMicro and produces figures. 
+            %The input folderToSave (optional) sets the folder into which the figures will be saved.
+            
+            if nargin < 3 || isempty(folderToSave)
+                toSave = false;
+            else
+                toSave = true;
+            end
+            
+            avgRippleBeforeAfter = obj.avgRippleBeforeAfter*obj.samplingRate;
+            
+            nPatients = length(results);
+            
+            for iPatient = 1:nPatients
+                nAreas = length(results(iPatient).resultsPerArea);
+                
+                for iArea = 1:nAreas
+                    %ripple summary figure - average ripple and spectogram
+                    %per micro channel
+                    
+                    chanList = results(iPatient).resultsPerArea(iArea).microChans;
+                    nChans = length(chanList);
+                    nFigures = ceil(nChans/obj.maxColumnsInFigureDataMicro);
+                    
+                    iChan = 1;
+                    
+                    for iFigure = 1:nFigures
+                        f1 = figure('Name',['Ripples Data patient ',results(iPatient).patientName,' micro channels ',num2str(chanList),' Area ',results(iPatient).resultsPerArea(iArea).area, ' Per Channel, Part', num2str(iFigure)]);
+                        
+                        for iColumn = 1:obj.maxColumnsInFigureDataMicro
+                            subplot(3,obj.maxColumnsInFigureDataMicro,iColumn);
+                            shadedErrorBar([-avgRippleBeforeAfter:avgRippleBeforeAfter]/obj.samplingRate,results(iPatient).resultsPerArea(iArea).avgRipple{iChan},results(iPatient).resultsPerArea(iArea).stdRipple{iChan}/sqrt(results(iPatient).resultsPerArea(iArea).nRipples(iChan)));
+                            xlabel('Time (sec)');
+                            ylabel('uV');
+                            title(['Average of detected ripple per chan ',num2str(chanList(iChan)) ,' nRipples=',num2str(results(iPatient).resultsPerArea(iArea).nRipples(iChan))]);
+                            
+                            subplot(3,obj.maxColumnsInFigureDataMicro,iColumn+obj.maxColumnsInFigureDataMicro);
+                            plot(obj.freqoiForAvgSpec,results(iPatient).resultsPerArea(iArea).specRipple{iChan});
+                            xlabel('Frequency');
+                            title('Spectrum of average 0-10 Hz');
+                            
+                            subplot(3,obj.maxColumnsInFigureDataMicro,iColumn+2*obj.maxColumnsInFigureDataMicro);
+                            if size(results(iPatient).resultsPerArea(iArea).meanTFRRipple{iChan},1)>1
+                                imagesc([-obj.timeBeforeAfterEventRipSpec*obj.samplingRate:obj.timeBeforeAfterEventRipSpec*obj.samplingRate]/obj.samplingRate,obj.freqRangeForAvgSpec, results(iPatient).resultsPerArea(iArea).meanTFRRipple{iChan});
+                                set(gca, 'YDir','normal');
+                                xlabel('Time (sec)');
+                                ylabel('frequency');
+                                title('Average of ripple triggerd TFR per channel');
+                                colorbar;
+                            else
+                                title('No ripples');
+                            end
+                            
+                            iChan = iChan+1;
+                            if iChan > nChans
+                                break;
+                            end
+                        end
+                        
+                        suptitle(['Ripples Channel Data ',results(iPatient).patientName,' Micro Channels ',num2str(chanList),' Area ',results(iPatient).resultsPerArea(iArea).area,' Per Channel, Part', num2str(iFigure)]);
+                        
+                        if toSave
+                            set(f1, 'Position', get(0, 'Screensize'));
+                            if ~isfolder([folderToSave,'\',results(iPatient).patientName])
+                                mkdir([folderToSave,'\',results(iPatient).patientName]);
+                            end
+                            saveas(f1,[folderToSave,'\',results(iPatient).patientName,'\ripple_micro_channels_data_single_channels_area_' results(iPatient).resultsPerArea(iArea).area,'_',num2str(iFigure),'.jpg']);
+                            close(f1);
+                        end
+                    end
+                    
+                    %a figure for all the ripples together + tfr at macro
+                    %channel
+                    f1 = figure('Name',['Ripples Data patient ',results(iPatient).patientName,' micro channels ',num2str(chanList),' Area ',results(iPatient).resultsPerArea(iArea).area, ' All Ripples']);
+                    
+                    subplot(4,1,1);
+                    shadedErrorBar([-avgRippleBeforeAfter:avgRippleBeforeAfter]/obj.samplingRate,results(iPatient).resultsPerArea(iArea).avgRippleAll,results(iPatient).resultsPerArea(iArea).stdRippleAll/sqrt(results(iPatient).resultsPerArea(iArea).nRipplesAll));
+                    xlabel('Time (sec)');
+                    ylabel('uV');
+                    title(['Average of detected ripple for all ripples pooled, nRipples=',num2str(results(iPatient).resultsPerArea(iArea).nRipplesAll)]);
+                    
+                    subplot(4,1,2);
+                    plot(obj.freqoiForAvgSpec,results(iPatient).resultsPerArea(iArea).specRippleAll);
+                    xlabel('Frequency');
+                    title('Spectrum of average 0-10 Hz, all ripples pooled');
+                    
+                    subplot(4,1,3);
+                    if size(results(iPatient).resultsPerArea(iArea).meanTFRAll,1)>1
+                        imagesc([-obj.timeBeforeAfterEventRipSpec*obj.samplingRate:obj.timeBeforeAfterEventRipSpec*obj.samplingRate]/obj.samplingRate,obj.freqRangeForAvgSpec, results(iPatient).resultsPerArea(iArea).meanTFRAll);
+                        set(gca, 'YDir','normal');
+                        xlabel('Time (sec)');
+                        ylabel('frequency');
+                        title('Average of ripple triggerd TFR for all ripples, pooled');
+                        colorbar;
+                    else
+                        title('No ripples');
+                    end
+                    
+                    subplot(4,1,4);
+                    if size(results(iPatient).resultsPerArea(iArea).meanTFRofMacroAtRip,1)>1
+                        imagesc([-obj.timeBeforeAfterEventRipSpec*obj.samplingRate:obj.timeBeforeAfterEventRipSpec*obj.samplingRate]/obj.samplingRate,obj.freqRangeForShowingSpindles, results(iPatient).resultsPerArea(iArea).meanTFRofMacroAtRip);
+                        set(gca, 'YDir','normal');
+                        xlabel('Time (sec)');
+                        ylabel('frequency');
+                        title(['Average of ripple triggerd TFR of macro channel for area-ripples (voted ripples), chan ',num2str(results(iPatient).resultsPerArea(iArea).macro1Chan),' nRipples = ',num2str(results(iPatient).resultsPerArea(iArea).nRipplesArea)]);
+                        colorbar;
+                    else
+                        title('No ripples');
+                    end
+                    
+                    suptitle(['Ripples Data patient ',results(iPatient).patientName,' micro channels ',num2str(chanList),' Area ',results(iPatient).resultsPerArea(iArea).area, ' All Ripples']);
+                    
+                    if toSave
+                        set(f1, 'Position', get(0, 'Screensize'));
+                        if ~isfolder([folderToSave,'\',results(iPatient).patientName])
+                            mkdir([folderToSave,'\',results(iPatient).patientName]);
+                        end
+                        saveas(f1,[folderToSave,'\',results(iPatient).patientName,'\ripple_micro_channels_data_all_ripples_area_' results(iPatient).resultsPerArea(iArea).area,'.jpg']);
                         close(f1);
                     end
                 end
