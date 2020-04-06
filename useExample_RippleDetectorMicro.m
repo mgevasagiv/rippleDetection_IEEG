@@ -25,7 +25,7 @@ channelsPerPatient = {[1 2 3]};
 %finding a ripple per area (i.e. the merging process will not include them, 
 %the saving method will also not save single ripples for them) and the
 %plotting method will not plot them
-noisyChannelsPerPatient = {[9]};
+noisyChannelsPerPatient = {[]};
 
 runData = [];
 nPatients = length(patients);
@@ -37,9 +37,14 @@ for iPatient = 1:nPatients
     %reference areas per patient (for the detection phase)
     runData(iPatient).referenceAreas = referenceAreasPerPatient{iPatient};
     %The folder where the raw data is stored - you will need to change it
-    runData(iPatient).MicroDataFolder = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\MICRO'];       
+    runData(iPatient).MicroDataFolder = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\MICRO'];
+    %The folder where the macro raw data is stored
+    runData(iPatient).DataFolder = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MACRO'];
     %The folder+filename from which micro ripples are going to be loaded
     runData(iPatient).MicroRipplesFileNames = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\MICRO\rippleResults\rippleTimes'];
+    %The folder+filename from which spindles are going to be loaded (should be the same
+    %as the line above if the detections are first run and saved into SpindlesStaresinaFileNames
+    runData(iPatient).SpindlesFileNames = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MACRO\spindleStaresinaResults\spindleTimes'];
     %The folder+filename into which the spikes results is going to be stored or is
     %already stored if the spikes detection was already run (spikes for
     %micro channels are per area - so they should be saved as
@@ -52,6 +57,7 @@ for iPatient = 1:nPatients
     runData(iPatient).channelsToRunOn = channelsPerPatient{iPatient};   
     %micro montage file name - required
     runData(iPatient).microMontageFileName = ['C:\Users\user\google drive\MayaProject\montages\',patients{iPatient},'\',expNames{iPatient},'\montage.mat'];
+    runData(iPatient).macroMontageFileName = ['C:\Users\user\google drive\MayaProject\badChans\newMontages\',macroMontageNames{iPatient},'.mat'];
     %name of file with single units info
     runData(iPatient).spikeData = ['D:\data_p\',patients{iPatient},'\',expNames{iPatient},'\averagedRef\',patients{iPatient},'_spike_timestamps_post_processing.mat'];
     runData(iPatient).noisyChannels = noisyChannelsPerPatient{iPatient};
@@ -64,23 +70,34 @@ rd = RippleDetector;
 %saving detections for the specified areas
 rd.saveRipplesDetectionsMicro(runData);
 
-%% plotting micro ripples, second input parameter is the area name, third is a folder to save the figures to
+%% plotting micro ripples, second input parameter is the area name, third is the reference area (can be empty), fourth is a folder to save the figures to
 rd.plotRipplesMicro(runData(1), 'RAH', 'LAH', 'D:\SingleRipplesFolder');
+
+%% ripple related analyses - ripple average and spectrums
+%areasToRun on sets on which areas the data will be produced (for this
+%method if it's empty no data will be produced)
+runData(1).areasToRunOn = {'RAH'};
+%second parameter is a filename for saving results, can be left empty (and
+%it will not save it)
+resultsData = rd.runRippleDataMicro(runData(1), 'D:\results\resultsMicroData487.mat');
+%plotting the figures, the second parameter is the folder for
+%saving the figures, can be left empty and the figures will be presented on
+%screen
+rd.plotResultsRipplesDataMicro(resultsData,'D:\results\dataFiguresFolder');
 
 %% ripple related analyses - ripple spike correlation
 
-rd = RippleDetector;
 %if areasToRunOn is empty it will run on
 %all areas, in this example we set areasToRunOn to 'RAH' so the analysis
 %will be performed only on RAH
 runData(1).areasToRunOn = {'RAH'};
 %second parameter is a filename for saving results, can be left empty (and
 %it will not save it)
-results = rd.runRipSpikesMicro(runData(1), 'D:\results\resultsMicro487.mat');
-results = rd.runRipSpikesMicro(runData(1));
-
+resultsRS = rd.runRipSpikesMicro(runData(1), 'D:\results\resultsMicroRipSpike487.mat');
 
 %plotting the figures, the second parameter is the folder for
 %saving the figures, can be left empty and the figures will be presented on
 %screen
-rd.plotResultsSpikes(results,'D:\results\figuresFolder');
+rd.plotResultsSpikes(resultsRS,'D:\results\RSFiguresFolder');
+
+
