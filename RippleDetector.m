@@ -64,6 +64,7 @@ classdef RippleDetector < handle
 
         %micro constants
         ripplesDistMicrChanForMerge = 15; %ms
+        minNripplesForAnalysis_perChannel = 20; % dropping channels with low ripple rate
 
         %plotting constants
         nBinsHist = 10;
@@ -921,14 +922,16 @@ classdef RippleDetector < handle
 
                     disp(['area ',currArea,' ',num2str(iArea),'/',num2str(nAreas)]);
 
-                    %find closest macro channel (macro-1 in area)
-                    currChansMacro = allChansMacro(strcmp(allAreasMacro,currArea));
                     currChansMicro = allChansMicro(strcmp(allAreasMicro,currArea));
                     if isfield(runData(iPatient), 'noisyChannels') && ~isempty(runData(iPatient).noisyChannels)
                         currChansMicro = currChansMicro(~ismember(currChansMicro,runData(iPatient).noisyChannels));
                     end
 
-                    macro1chan = min(currChansMacro);
+                    % find closest macro channel (macro-1 in area)
+                    % currChansMacro = allChansMacro(strcmp(allAreasMacro,currArea));
+                    % macro1chan = min(currChansMacro);
+                    macro1chan = getDeepMacros(macroMontage, currArea); 
+                 
                     resultsPerArea(iArea).microChans = currChansMicro;
                     resultsPerArea(iArea).macro1Chan = macro1chan;
 
@@ -1094,9 +1097,9 @@ classdef RippleDetector < handle
                         for iRipple = 1:nRipples
                             chanRipples(iRipple,:) = datas{iChan}(ripplesTimesChan{iChan}(iRipple)-avgRippleBeforeAfter:ripplesTimesChan{iChan}(iRipple)+avgRippleBeforeAfter);
                         end
-                        if ~isempty(chanRipples)
-                            avgRipple = nanmean(chanRipples);
-                            stdRipple = nanstd(chanRipples);
+                        if length(chanRipples) > obj.minNripplesForAnalysis_perChannel
+                            avgRipple = nanmean(chanRipples,1); % MGS - adding dimension
+                            stdRipple = nanstd(chanRipples,0,1); % MGS - adding dimension
                             %spectrum of average
                             specRipple = ft_specest_mtmfft(avgRipple,[1:length(avgRipple)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
                             specRipple = abs(squeeze(specRipple(1,1,:,:)));
@@ -1151,7 +1154,11 @@ classdef RippleDetector < handle
                         meanTFRRipple = pacCalc.plotAvgSpecDiff(datas{iChan}, ripplesTimesChan{iChan});
 
                         resultsPerArea(iArea).nRipples(iChan) = nRipples;
-
+                        
+                        if length(stdRipple) ~= length(avgRipple)
+                            error('problem in std calc')
+                        end
+                        
                         resultsPerArea(iArea).avgRipple{iChan} = avgRipple;
                         resultsPerArea(iArea).stdRipple{iChan} = stdRipple;
                         resultsPerArea(iArea).specRipple{iChan} = specRipple;
@@ -1190,6 +1197,11 @@ classdef RippleDetector < handle
                     %calculate parameters for all ripples together
                     avgRipple = nanmean(allRipples);
                     stdRipple = nanstd(allRipples);
+                    
+                    if length(stdRipple) ~= length(avgRipple)
+                        error('problem in std calc')
+                    end
+                    
                     %spectrum of average
                     specRipple = ft_specest_mtmfft(avgRipple,[1:length(avgRipple)]/obj.samplingRate,'freqoi',obj.freqoiForAvgSpec,'taper','hanning');
                     specRipple = abs(squeeze(specRipple(1,1,:,:)));
@@ -1764,7 +1776,7 @@ classdef RippleDetector < handle
 
                     for iArea = 1:nAreas
                         currArea = areasToRunOn{iArea};
-                        disp(['area ',currArea,' ',num2str(iArea)','/',num2str(nAreas)]);
+                        disp(sprintf('area %s %d/%d',currArea,iArea,nAreas));
 
                         %find micro channels indices
                         currChanInds = allChans(strcmp(allAreas,currArea));
@@ -2147,7 +2159,7 @@ classdef RippleDetector < handle
                     currArea = areasToRunOn{iArea};
                     resultsPerChan(iArea).area = currArea;
 
-                    disp(['area ',currArea,' ',num2str(iArea)','/',num2str(nAreas)]);
+                    disp(sprintf('area %s %d/%d',currArea,iArea,nAreas));
 
                     resultsPerChan(iArea).channelNum = [];
 
@@ -2217,8 +2229,19 @@ classdef RippleDetector < handle
                     ripplesDuringStimInds = ismember(ripplesTimes,find(ripplesIndsLog & stimInds));
 
                     %find all units in spike data recorded in area
-                    unitInds = find(strcmp(extractfield(spikeData.micro_channels_spike_summary.unit_list_xls,'Location'),currArea));
-
+                    try
+                        % unitInds = find(strcmp(extractfield(spikeData.micro_channels_spike_summary.unit_list_xls,'Location'),currArea));
+                        unitInds = [];
+                        for ii_u = 1:length(spikeData.micro_channels_spike_summary.unit_list_xls)
+                            if strcmp(getfield(spikeData.micro_channels_spike_summary.unit_list_xls(ii_u),'Location'),currArea)
+                                unitInds = [unitInds, ii_u];
+                            end
+                        end
+                        
+                    catch
+                        unitInds = [];
+                    end
+                    
                     if obj.spikeMultiUnits
                         currChannels = [spikeData.micro_channels_spike_summary.unit_list_xls(unitInds).Channel];
                         uChannels = unique(currChannels);
@@ -2312,7 +2335,7 @@ classdef RippleDetector < handle
             end
 
             if ~isempty(fileNameResults)
-                save(fileNameResults,'results');
+                save(fileNameResults,'results','-v7.3'); % MGS
             end
 
         end
@@ -2411,9 +2434,11 @@ classdef RippleDetector < handle
                                 resCont = results(iPatient).resultsPerChan(iChan).fireRateControlBefore{currUnit};
                                 nRipplesBefore = size(resRipB,1);
 
-                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], ...
+                                    mean(resRipB,1), std(resRipB,0,1)/sqrt(nRipplesBefore),'lineprops','-g'); % MGS - dimension fix
                                 hold all;
-                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesBefore),'lineprops','-b');
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], ...
+                                    mean(resCont,1), std(resCont,0,1)/sqrt(nRipplesBefore),'lineprops','-b'); % MGS - dimension fix
                                 hold off;
 
                                 aucRipB = sum(resRipB(:,indsForSign),2);
@@ -2484,9 +2509,9 @@ classdef RippleDetector < handle
                             %third plot - before vs stim
                             subplot(nInFigure*2,4,[(iUnit-1)*8+3 (iUnit-1)*8+7]);
                             if ~isempty(resRipB) && ~isempty(resRipS)
-                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB,1), std(resRipB,0,1)/sqrt(nRipplesBefore),'lineprops','-g');
                                 hold all;
-                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipS), std(resRipS)/sqrt(nRipplesStim),'lineprops','-r');
+                                shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipS,1), std(resRipS,0,1)/sqrt(nRipplesStim),'lineprops','-r');
                                 hold off;
 
                                 [~,p] = ttest2(aucRipB,aucRipS);
@@ -2566,9 +2591,9 @@ classdef RippleDetector < handle
                         resRipB = results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore;
                         resCont = results(iPatient).resultsPerChan(iChan).fireRateControlAvgUnitsBefore;
                         nRipplesBefore = size(resRipB,1);
-                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB), std(resRipB)/sqrt(nRipplesBefore),'lineprops','-g');
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resRipB,1), std(resRipB,0,1)/sqrt(nRipplesBefore),'lineprops','-g');
                         hold all;
-                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont), std(resCont)/sqrt(nRipplesBefore),'lineprops','-b');
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(resCont,1), std(resCont,0,1)/sqrt(nRipplesBefore),'lineprops','-b');
                         hold off;
                         %ttest around ripple
 
@@ -2624,9 +2649,11 @@ classdef RippleDetector < handle
                     %third plot - before vs stim
                     subplot(1,3,3);
                     if ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore) && ~isempty(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)
-                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore)/sqrt(nRipplesBefore),'lineprops','-g');
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore,1), ...
+                            std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsBefore,0,1)/sqrt(nRipplesBefore),'lineprops','-g');
                         hold all;
-                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim), std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim)/sqrt(nRipplesStim),'lineprops','-r');
+                        shadedErrorBar([-obj.windowSpikeRateAroundRip:obj.windowSpikeRateAroundRip], mean(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim,1),...
+                            std(results(iPatient).resultsPerChan(iChan).fireRateRipAvgUnitsStim,0,1)/sqrt(nRipplesStim),'lineprops','-r');
                         hold off;
                         legend({'Before','Stimulations'});
                         xlabel('Time (ms)');
@@ -2708,7 +2735,9 @@ classdef RippleDetector < handle
 
                         for iFigure = 1:nFiguresForSingle
                             set(fs{iFigure}, 'Position', get(0, 'Screensize'));
-                            saveas(fs{iFigure},[folderToSave,'\',filename, num2str(results(iPatient).resultsPerChan(iChan).channelNum) '_',num2str(iFigure),'.jpg']);
+                            
+                            % MGS - adjusting image name
+                            saveas(fs{iFigure},[folderToSave,'\',results(iPatient).patientName,'\',filename, num2str(results(iPatient).resultsPerChan(iChan).area) '_',num2str(iFigure),'.jpg']);
                             close(fs{iFigure});
                         end
 
@@ -2899,6 +2928,9 @@ classdef RippleDetector < handle
                 nAreas = length(results(iPatient).resultsPerArea);
 
                 for iArea = 1:nAreas
+                    if isempty(results(iPatient).resultsPerArea(iArea).nRipples)
+                        continue
+                    end
                     %ripple summary figure - average ripple and spectogram
                     %per micro channel
 
@@ -2909,11 +2941,14 @@ classdef RippleDetector < handle
                     iChan = 1;
 
                     for iFigure = 1:nFigures
+ 
+                                                    
                         f1 = figure('Name',['Ripples Data patient ',results(iPatient).patientName,' micro channels ',num2str(chanList),' Area ',results(iPatient).resultsPerArea(iArea).area, ' Per Channel, Part', num2str(iFigure)]);
 
                         for iColumn = 1:obj.maxColumnsInFigureDataMicro
                             subplot(3,obj.maxColumnsInFigureDataMicro,iColumn);
-                            shadedErrorBar([-avgRippleBeforeAfter:avgRippleBeforeAfter]/obj.samplingRate,results(iPatient).resultsPerArea(iArea).avgRipple{iChan},results(iPatient).resultsPerArea(iArea).stdRipple{iChan}/sqrt(results(iPatient).resultsPerArea(iArea).nRipples(iChan)));
+                            shadedErrorBar([-avgRippleBeforeAfter:avgRippleBeforeAfter]/obj.samplingRate,results(iPatient).resultsPerArea(iArea).avgRipple{iChan},...
+                                results(iPatient).resultsPerArea(iArea).stdRipple{iChan}/sqrt(results(iPatient).resultsPerArea(iArea).nRipples(iChan)));
                             xlabel('Time (sec)');
                             ylabel('uV');
                             title(['Average of detected ripple per chan ',num2str(chanList(iChan)) ,' nRipples=',num2str(results(iPatient).resultsPerArea(iArea).nRipples(iChan))]);
@@ -2922,7 +2957,7 @@ classdef RippleDetector < handle
                             plot(obj.freqoiForAvgSpec,results(iPatient).resultsPerArea(iArea).specRipple{iChan});
                             xlabel('Frequency');
                             title('Spectrum of average 0-10 Hz');
-
+                            
                             subplot(3,obj.maxColumnsInFigureDataMicro,iColumn+2*obj.maxColumnsInFigureDataMicro);
                             if size(results(iPatient).resultsPerArea(iArea).meanTFRRipple{iChan},1)>1
                                 imagesc([-obj.timeBeforeAfterEventRipSpec*obj.samplingRate:obj.timeBeforeAfterEventRipSpec*obj.samplingRate]/obj.samplingRate,obj.freqRangeForAvgSpec, results(iPatient).resultsPerArea(iArea).meanTFRRipple{iChan});
