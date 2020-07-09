@@ -1,16 +1,14 @@
 % source code for interictal spike detection
 IIS_det = SpikeWaveDetector;
 
-% database to run on -
-patients = {'p486','p487','p488','p489','p498','p499','p485'};
-expNames = {'EXP8','EXP3','EXP4','EXP3','EXP3','EXP8','EXP8'};
-sleepScoreFileName = {    'sleepScore_manualValidated_p486_8_RA1',...
+% database to run on - 
+patients = {'p486','p487','p488','p489','p498'};
+expNames = {'EXP8','EXP3','EXP4','EXP3','EXP3'};
+sleepScoreFileName = {    'sleepScore_manualValidated_p486_8_RA1',...    
     'sleepScore_manualValidated_p487_3_ROF2',...
     'sleepScore_manualValidated_p488_4_LPHG2',...
-    'sleepScore_manualValidated_p489_3_RPHG3',...
-    'sleepScore_manualValidated_p498_3_ROF1',...
-    'sleepScore_manualValidated_p499_8_RPT2',...
-    'sleepScore_manualValidated_p485_8_ROF7_0016'};
+    'sleepScore_manualValidated_p489_3_RPHG3'...
+    'sleepScore_manualValidated_p498_3_ROF1'};
 
 %channels (micro) for which you want to detect ripples (this is just an
 %example)
@@ -22,10 +20,6 @@ MICROchannelsPerPatient{3} = {{[1:8]},{[9:16]},{[17:24]},{[25:32]},{[33:40]},{[4
     {[65:72]},{[73:80]},{[81:88]}};
 MICROchannelsPerPatient{4} = {{[1:8]},{[9:16]},{[17:24]},{[25:32]},{[49:56]},{[57:64]}};% LEC, LMH, LPHG, RPHG
 MICROchannelsPerPatient{5} = {{[1:8]},{[17:24]},{[25:32]},{[33:40]},{[49:56]},{[57:64]}};
-MICROchannelsPerPatient{6} = {{[1:8]},{[9:16]},{[17:24]},{[25:32]},{[33:40]},{[41:48]},{[49:56]},{[57:64]},...
-    {[65:72]},{[73:80]}}; % p499
-MICROchannelsPerPatient{7} = {{[1:8]},{[9:16]},{[65:72]}}; % p485
-
 %this is optional for the micro analysis - if you provide a cell of area
 %names it will only run the analysis on these areas. If left empty or the
 %field doesn't exist it will run on all areas (which will require having
@@ -33,7 +27,7 @@ MICROchannelsPerPatient{7} = {{[1:8]},{[9:16]},{[65:72]}}; % p485
 % areasPerPatient = {{'REC','RPHG','LPHG'},{'RAH'},{'RMH','RPHG','LAH','LPHG'}};
 
 %this field is not relevant to micro analysis
-channelCouplesPerPatient = {[1 19; 8 19; 36 43],[],[],[],[],[]};
+channelCouplesPerPatient = {[1 19; 8 19; 36 43],[],[]};
 
 data_p_path = 'E:\Data_p\';
 PLOT_SINGLE_RIPPLES = 1;
@@ -74,18 +68,20 @@ for iPatient = 1:nPatients
     runData(iPatient).SpindlesFileNames = [data_p_path,patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MACRO\spindleResults\spindleTimes'];
     runData(iPatient).channelCouples = channelCouplesPerPatient{iPatient};
     
-    %The folder where the ripples detections results is going to be stored
-    %(it should exist, the code doesn't create it)
-    runData(iPatient).RipplesFolder = [data_p_path ,patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MICRO\rippleResults\'];
-    runData(iPatient).RipplesFileNames = fullfile(runData(iPatient).RipplesFolder,'rippleTimes');
-    runData(iPatient).MicroRipplesFileNames = runData(iPatient).RipplesFileNames;
-    a = dir(runData(iPatient).RipplesFolder);
-    if isempty(a); mkdir(runData(iPatient).RipplesFolder); end
     
     results = [];
 
     for iChan = 1:nChan
-            
+        
+        
+        %The folder where the ripples detections results is going to be stored
+        %(it should exist, the code doesn't create it)
+        runData(iPatient).RipplesFolder = [data_p_path ,patients{iPatient},'\',expNames{iPatient},'\Denoised_Downsampled_InMicroVolt\MICRO\rippleResults\'];
+        runData(iPatient).RipplesFileNames = fullfile(runData(iPatient).RipplesFolder,'rippleTimes');
+        runData(iPatient).MicroRipplesFileNames = runData(iPatient).RipplesFileNames;
+        a = dir(runData(iPatient).RipplesFolder);
+        if isempty(a); mkdir(runData(iPatient).RipplesFolder); end
+        
         micro_ch = cell2mat(MICROchannelsPerPatient{iPatient}{iChan});
         
         %folder+filename where spikes are stored - i don't know if you want to remove
@@ -110,7 +106,7 @@ for iPatient = 1:nPatients
         MacroMontage = mfile.MacroMontage;
         MACRO_ch(iPatient,iChan) = getDeepMacros(MacroMontage, ch_area);
         
-        mfile = matfile(runData(iPatient).ExpDataFileName);
+        mfile = matfile(runData(iPatient).EXP_DATA_file);
         EXP_DATA = mfile.EXP_DATA;
         stimTimestamps_ms = EXP_DATA.stimTiming.validatedTTL_NLX;
         
@@ -159,8 +155,7 @@ for iPatient = 1:nPatients
         end
         
     end % run spike/sw/spindle detection for deep macro-channels
-end
-
+    
     
     
     
@@ -192,41 +187,50 @@ end
     
     if PLOT_SINGLE_RIPPLES
         %% plotting micro ripples, second input parameter is the area name, third is a folder to save the figures to
-        ch_area_cell = {'LMH','LEC'};
-        for ii_ch_p =  1:length(ch_area_cell)
-            refArea = [];
-            ch_area  = ch_area_cell{ii_ch_p};
-            mkdir(fullfile(runData(iPatient).RipplesFolder,'rippleFigures',ch_area));
-            rd.plotRipplesMicro(runData(iPatient), ch_area, refArea,...
-                fullfile(runData(iPatient).RipplesFolder,'rippleFigures',ch_area));
-            
-        end
+        mkdir(fullfile(runData(iPatient).RipplesFolder,'rippleFigures',ch_area));
+        refArea = [];
+        rd.plotRipplesMicro(runData(iPatient), ch_area, refArea,...
+            fullfile(runData(iPatient).RipplesFolder,'rippleFigures',ch_area));
     end
     
     summary_plots_folder = fullfile('E:\Data_p\ClosedLoopDataset\rippleDetResults\figures\');
-    pt_figure_folder = fullfile(summary_plots_folder,sprintf('%s',runData(iPatient).patientName));
-    if isempty(dir(pt_figure_folder)); mkdir(pt_figure_folder); end
+    if isempty(fullfile(summary_plots_folder,ch_area)); mkdir(fullfile(summary_plots_folder,sprintf('%s',runData(iPatient).patientName))); end;
    
     
-    %% Ripple - unit spiking correlation
+    % Ripple - unit spiking correlation
     fileNameResults = fullfile(runData(iPatient).RipplesFolder,sprintf('MICRO_ripplesSpikes_%s_%s.mat',...
         runData(iPatient).patientName,expNames{iPatient}));
-    results = rd.runRipSpikesMicro(runData(iPatient), fileNameResults);       
+    results = rd.runRipSpikesMicro(runData(iPatient), fileNameResults);
+       
     %plotting the figures, the second parameter is the folder for
     %saving the figures, can be left empty and the figures will be presented on
     %screen
     rd.plotResultsSpikes(results,summary_plots_folder);
 
-    
-    
-    %% Ripple - summary of spectral content 
-    
+    % Ripple - summary of spectral content 
     fileNameResults = fullfile(runData(iPatient).RipplesFolder,sprintf('MICRO_ripplesSummary_%s.mat',runData(iPatient).patientName));
     results = [];
     runData(iPatient).channelsToRunOn = [];
-    results = rd.runRippleDataMicro(runData(iPatient), fileNameResults);
+    results = rd.runRippleDataMicro (runData(iPatient), fileNameResults);
     rd.plotResultsRipplesDataMicro(results,summary_plots_folder);
-    
-    
-    
 end
+
+
+
+
+
+%% ripple related analyses - ripple spike correlation
+
+rd = RippleDetector;
+%if areasToRunOn is empty it will run on
+%all areas, in this example we set areasToRunOn to 'RAH' so the analysis
+%will be performed only on RAH
+runData(1).areasToRunOn = {'LMH'};
+%second parameter is a filename for saving results, can be left empty (and
+%it will not save it)
+results = rd.runRipSpikesMicro(runData(1), fullfile(runData(iPatient).RipplesFolder,sprintf('MICROripples_%s.mat',runData(iPatient).patientName)));
+
+%plotting the figures, the second parameter is the folder for
+%saving the figures, can be left empty and the figures will be presented on
+%screen
+rd.plotResultsSpikes(results,'E:\Data_p\ClosedLoopDataset\rippleDetResults\figures\');
