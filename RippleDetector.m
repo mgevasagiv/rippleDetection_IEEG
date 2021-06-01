@@ -6,13 +6,13 @@ classdef RippleDetector < handle
         dataFilePrefix = 'CSC';
         
         %all the parameters are from Staresina et al (and Zhang et al is identical)
-        %minFreq = 80;
-        %maxFreq = 100;
+        minFreq = 80;
+        maxFreq = 100;
         
         % ripple detection on MICRO channels - parameters as in Le Van
         % Quyen et al 2008
-        minFreq = 80;
-        maxFreq = 200;
+        % minFreq = 80;
+        % maxFreq = 200;
         
         RMSWindowDuration = 20; %ms
         rippleThreshPercentile = 99;
@@ -48,7 +48,7 @@ classdef RippleDetector < handle
         minDistControl = 300; %ms
         maxDistControl = 1300; %ms
         
-        firingRateWinSize = 100; %ms
+        firingRateWinSize = 10; %ms
         windowSpikeRateAroundRip = 500; %ms
         windowForSignificance = 100; %ms
         
@@ -423,16 +423,16 @@ classdef RippleDetector < handle
             % a method which receives the ripple and spike times and returns the spike rate around ripples and around
             % controls
             % The input is:
-            % rippleTimes � array of ripple times
-            % rippleStartEnd � matrix where each row is a ripple and index <I,1> is the start point of ripple I and index
+            % rippleTimes = array of ripple times
+            % rippleStartEnd = matrix where each row is a ripple and index <I,1> is the start point of ripple I and index
             % <I,2> is the end point of ripple i.
-            % spikeTimes � array of spike times, can also be a cell array of arrays of spike times, in which case the
+            % spikeTimes = array of spike times, can also be a cell array of arrays of spike times, in which case the
             % analysis will be performed on the average spike rate.
-            % dataDuration (optional) � the length of the session in ms.
+            % dataDuration (optional) = the length of the session in ms.
             % The output is:
-            % fireRateRip � matrix with the number of rows and the number of ripples where each row is the average spike
+            % fireRateRip = matrix with the number of rows and the number of ripples where each row is the average spike
             % rate around the ripples.
-            % fireRateControl - matrix with the number of rows and the number of ripples where each row is the average
+            % fireRateControl = matrix with the number of rows and the number of ripples where each row is the average
             % spike rate around the controls.
             
             
@@ -502,8 +502,11 @@ classdef RippleDetector < handle
                     currUnitsAvgControl = zeros(1,2*obj.windowSpikeRateAroundRip+1);
                     for iUnit = 1:nUnits
                         currUnitsAvg = currUnitsAvg+spikeRate{iUnit}(rippleTimes(iRipple)-obj.windowSpikeRateAroundRip:rippleTimes(iRipple)+obj.windowSpikeRateAroundRip);
-                        currUnitsAvgControl = currUnitsAvgControl+spikeRate{iUnit}(max(1,controlIndForRate-obj.windowSpikeRateAroundRip):... % MGS - fixed boundary conditions
-                            min(controlIndForRate+obj.windowSpikeRateAroundRip,length(spikeRate{iUnit})));
+                        if ( controlIndForRate-obj.windowSpikeRateAroundRip >=0 && ...
+                                controlIndForRate+obj.windowSpikeRateAroundRip <= length(spikeRate{iUnit}) )
+                            currUnitsAvgControl = currUnitsAvgControl+spikeRate{iUnit}(controlIndForRate-obj.windowSpikeRateAroundRip:... % MGS - fixed boundary conditions
+                                controlIndForRate+obj.windowSpikeRateAroundRip);
+                        end
                     end
                     fireRateRip(end+1,:) = currUnitsAvg/nUnits;
                     fireRateControl(end+1,:) = currUnitsAvgControl/nUnits;
@@ -629,6 +632,9 @@ classdef RippleDetector < handle
                 fileNameResults = '';
             end
             
+            removeIIS = 1; 
+            removeSTIM_artifacts = 1;
+            
             shortTimeRangeAfterStim = obj.shortTimeRangeAfterStim*obj.samplingRate;
             midTimeRangeAfterStim = obj.midTimeRangeAfterStim*obj.samplingRate;
             stimulusDuration = obj.stimulusDuration*obj.samplingRate/1000;
@@ -677,7 +683,11 @@ classdef RippleDetector < handle
                     
                     %load the data
                     try
-                        data = [runData(iPatient).DataFolder '\CSC' num2str(currChan) '.mat'];
+                        if(strfind(runData(iPatient).RipplesFileNames,'Bipolar'))
+                            data = [runData(iPatient).DataFolder '\CSC_biPolar_' num2str(currChan) '.mat'];    
+                        else
+                            data = [runData(iPatient).DataFolder '\CSC' num2str(currChan) '.mat'];
+                        end
                         data = load(data);
                         data = data.data;
                     catch
@@ -697,6 +707,29 @@ classdef RippleDetector < handle
                         end
                     else
                         IIStimes = [];
+                    end
+                    % Remove IIS from data before using it for ripple
+                    % average and TFR:
+                    % remove windowAroundSTIM ms before and after every stimulation as
+                    % provided as input parameter
+                    if removeSTIM_artifacts
+                        winAroundIIS = obj.windowAroundSTIM*obj.samplingRate/1000;
+                        pointsBefore = winAroundIIS;
+                        pointsAfter = winAroundIIS;
+                        data(stimTimes-pointsBefore+1:stimTimes+pointsAfter) = nan;
+                    end
+
+                    %remove windowAroundIIS ms before and after every IIS as
+                    %provided as input parameter
+                    if removeIIS
+                        winAroundIIS = obj.windowAroundIIS*obj.samplingRate/1000;
+                        pointsBefore = winAroundIIS;
+                        pointsAfter = winAroundIIS;
+                        
+                        IIStimes(IIStimes < winAroundIIS) = [];
+                        IIStimes(IIStimes > length(data) - winAroundIIS) = [];
+                        
+                        data(IIStimes-pointsBefore+1:IIStimes+pointsAfter) = nan;
                     end
                     
                     %load ripples
@@ -1451,7 +1484,12 @@ classdef RippleDetector < handle
                     %find all units recorded in the area using the spike
                     %data
                     try
-                        unitInds = find(strcmp(extractfield(spikeData.micro_channels_spike_summary.unit_list_xls,'Location'),currArea));
+                        unitInds= [];
+                        for iiU = 1:length(spikeData.micro_channels_spike_summary.unit_list_xls)
+                            if strcmpi(spikeData.micro_channels_spike_summary.unit_list_xls(iiU).Location, currArea)
+                                unitInds(end+1) = iiU;
+                            end
+                        end
                     catch
                         unitInds = [];
                     end
@@ -1560,7 +1598,7 @@ classdef RippleDetector < handle
             end
             
             if ~isempty(fileNameResults)
-                save(fileNameResults,'results');
+                save(fileNameResults,'results','-v7.3');
             end
             
         end
@@ -2776,6 +2814,9 @@ classdef RippleDetector < handle
                             filename = '\ripple_spikes_single_units_';
                         end
                         
+                        if ~isfolder([folderToSave,'\',results(iPatient).patientName])
+                            mkdir([folderToSave,'\',results(iPatient).patientName]);
+                        end
                         for iFigure = 1:nFiguresForSingle
                             set(fs{iFigure}, 'Position', get(0, 'Screensize'));
                             
@@ -2785,9 +2826,7 @@ classdef RippleDetector < handle
                         end
                         
                         set(fs{end}, 'Position', get(0, 'Screensize'));
-                        if ~isfolder([folderToSave,'\',results(iPatient).patientName])
-                            mkdir([folderToSave,'\',results(iPatient).patientName]);
-                        end
+
                         saveas(fs{end},[folderToSave,'\',results(iPatient).patientName,'\ripple_spikes_avg_units_' num2str(results(iPatient).resultsPerChan(iChan).area),'.jpg']);
                         close(fs{end});
                     end
