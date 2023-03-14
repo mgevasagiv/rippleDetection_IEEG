@@ -3186,5 +3186,205 @@ classdef RippleDetector < handle
                 end
             end
         end
-    end
+        
+        function plotPopulationFig(obj, runData, outputFigureFolder)
+            SAVE_TABLE = 0;
+            mm = matfile(fullfile('E:\Data_p\ClosedLoopDataset\rippleDetResults\MACRO\','rippleInfo'));
+            rippleInfo = mm.rippleInfo;
+            chMTL_area = rippleInfo.area;
+            nRip = rippleInfo.nRip;
+            avgBefore = rippleInfo.avgBefore;
+            stdBefore = rippleInfo.stdBefore;
+            meanTFRRipBefore = rippleInfo.meanTFRRipBefore;
+            SU_mat = rippleInfo.SU_mat;
+            meanfireRateRipBefore = rippleInfo.meanfireRateRipBefore;
+            meanfireRateControlBefore = rippleInfo.meanfireRateControlBefore;
+            nSU = rippleInfo.nSU;
+            artifactInd = rippleInfo.artifactInd;
+            nRipThreshold = 20;
+            
+            nChan = size(avgBefore,1);
+            
+            
+            for ii_a = 1:4
+                if ii_a == 1
+                    hipInd = zeros(1,length(chMTL_area));
+                    for ii = 1:length(chMTL_area)
+                        area = chMTL_area{ii};
+                        if area.isHip
+                            hipInd(ii) = 1;
+                        end
+                    end
+                    ind = find(hipInd);
+                    figName = 'MACROrippleGrandAverage_hip';
+                elseif ii_a == 2
+                    hipInd = zeros(1,length(chMTL_area));
+                    for ii = 1:length(chMTL_area)
+                        area = chMTL_area{ii};
+                        if area.isEC
+                            hipInd(ii) = 1;
+                        end
+                    end
+                    ind = find(hipInd);
+                    figName = 'MACROrippleGrandAverage_EC';
+                elseif ii_a == 3
+                    hipInd = zeros(1,length(chMTL_area));
+                    for ii = 1:length(chMTL_area)
+                        area = chMTL_area{ii};
+                        if area.isPHG
+                            hipInd(ii) = 1;
+                        end
+                    end
+                    ind = find(hipInd);
+                    figName = 'MACROrippleGrandAverage_PHG';
+                elseif ii_a == 4
+                    for ii = 1:length(chMTL_area)
+                        area = chMTL_area{ii};
+                        if area.isMTL
+                            hipInd(ii) = 1;
+                        end
+                    end
+                    ind = find(hipInd);
+                    figName = 'MACROrippleGrandAverage';
+                end
+                
+                ind(ismember(ind,artifactInd)) = [];
+                ind(ismember(ind,find(nRip < nRipThreshold))) = [];
+                
+                NRip = sum(nRip(ind));
+                
+                % stats
+                disp(ii_a)
+                fprintf('%d electrodes, %d pts, %d ripples\n',length(ind),length(unique(rippleInfo.ptNum_v(ind))),NRip)
+                fig_info{ii_a} = sprintf('%d electrodes, %d pts, %d ripples',length(ind),length(unique(rippleInfo.ptNum_v(ind))),NRip);
+                
+                avgWeighted = zeros(1,length(avgBefore)); stdWeighted = zeros(1,length(avgBefore));
+                meanTFRRipWeighted = zeros(250,length(avgBefore));
+                for iiC = ind
+                    avgWeighted = avgWeighted + (nRip(iiC)/NRip) * avgBefore(iiC,:);
+                    stdWeighted = stdWeighted + (sqrt( (nRip(iiC)-1)* stdBefore(iiC,:).^2 )/(NRip-iiC));
+                    meanTFRRipWeighted(:,:) = meanTFRRipWeighted + (nRip(iiC)/NRip) * squeeze(meanTFRRipBefore(iiC,:,:)) ;
+                end
+                
+                NRip = sum(nRip(ind));
+                avgWeighted = zeros(1,length(avgBefore)); stdWeighted = zeros(1,length(avgBefore));
+                meanTFRRipWeighted = zeros(250,length(avgBefore));
+                for iiC = ind
+                    avgWeighted = avgWeighted + (nRip(iiC)/NRip) * avgBefore(iiC,:);
+                    stdWeighted = stdWeighted + (sqrt( (nRip(iiC)-1)* stdBefore(iiC,:).^2 )/(NRip-iiC));
+                    meanTFRRipWeighted(:,:) = meanTFRRipWeighted + (nRip(iiC)/NRip) * squeeze(meanTFRRipBefore(iiC,:,:)) ;
+                end
+                
+                
+                f0 = figure('Name', figName,'NumberTitle','off');
+                set(gcf,'DefaultAxesFontSize',8);
+                set(gcf,'DefaultAxesFontName','arial');
+                set(gcf,'PaperUnits','centimeters','PaperPosition',[0.2 0.2 15 7]); % this size is the maximal to fit on an A4 paper when printing to PDF
+                set(gcf,'PaperOrientation','portrait');
+                set(gcf,'Units','centimeters','Position', get(gcf,'paperPosition')+[1 1 0 0]);
+                colormap('jet');
+                
+                % Ripple waveform average
+                axes('position',[0.1,0.58,0.3,0.28])
+                shadedErrorBar(1:length(avgBefore),avgWeighted,stdWeighted/sqrt(nChan))
+                axis tight
+                set(gca,'xlim',[750 1250]);
+                XLIM = get(gca,'xlim');
+                
+                if ii_a == 4
+                    line([XLIM(1),XLIM(1)]+10,[15 45],'color','k','linewidth',4)
+                elseif ismember(ii_a,[2,3])
+                    line([XLIM(1),XLIM(1)]+10,[10 20],'color','k','linewidth',4)
+                elseif ii_a == 1
+                    line([XLIM(1),XLIM(1)]+10,[15 45],'color','k','linewidth',4)
+                end
+                
+                line([XLIM(1), XLIM(1)+100] ,[-20 -20],'color','k','linewidth',4)
+                axis off
+                
+                % Spike rate triggered by ripples
+                axes('position',[0.62,0.1,0.2,0.15])
+                suInd = find(ismember(SU_mat(:,1),ind));
+                meanM = nanmean(meanfireRateRipBefore(suInd,:));
+                stdM = nanstd(meanfireRateRipBefore(suInd,:));
+                shadedErrorBar(1:length(meanM),meanM,stdM/sqrt(nSU))
+                hold on
+                meanM = nanmean(meanfireRateControlBefore(suInd,:));
+                stdM = nanstd(meanfireRateControlBefore(suInd,:));
+                shadedErrorBar(1:length(meanM),meanM,stdM/sqrt(length(suInd)),'lineProps',{'color',[0.2,.7,0.2]})
+                axis tight
+                set(gca,'xtick',[0 500 1000], 'xticklabels',[-0.5,0,0.5]);
+                if ii_a == 1
+                    set(gca,'ylim',[0 30], 'yticklabels',[0:10:30]);
+                else
+                    set(gca,'ylim',[0 20], 'yticklabels',[0,20]);
+                end
+                XLIM = get(gca,'xlim');
+                
+                
+                % Average TFR
+                axes('position',[0.12,0.1,0.4,0.4])
+                meanTFRRipWeighted(isnan(meanTFRRipWeighted)) = 0;
+                cmax = ceil(max(meanTFRRipWeighted(:)));
+                cmin = -cmax;
+
+                  
+                % h = imagesc(meanTFRRipWeighted, [-M,M]);
+                h = imagesc('Xdata',[-obj.timeBeforeAfterEventRipSpec*obj.samplingRate:obj.timeBeforeAfterEventRipSpec*obj.samplingRate]/obj.samplingRate,...
+                             'YData', obj.freqRangeForAvgSpec, ...
+                             'CData',meanTFRRipWeighted,...
+                             [cmin cmax]);
+
+                axis([-.25 .25 5 250])
+                set(gca,'xtick',[-.25,0,.25],'xticklabels',[-0.25,0,0.25])
+                set(gca,'ytick',[5,100,250])
+                axis xy
+                
+                cc = colorbar;
+                cc.Ticks = [-cmax,0,cmax];
+                % cc.TickLabels = [num2str(-cmax*100),'0',num2str(cmax*100)];
+                
+                [spectrum,ntaper,freqoi]  = ft_specest_mtmfft(avgBefore(ind,500:1500),[1:length(avgBefore)]/obj.samplingRate,'freqoi',[1:0.5:20],'taper','dpss','tapsmofrq',8);
+                specBefore = 10*log10(abs(squeeze(spectrum(1,1,:)).^2));
+                % specBefore = specBefore/max(specBefore);
+                
+                axes('position',[0.62,0.45,0.15,0.4])
+                plot(freqoi, specBefore', 'k','linewidth',2)
+                set(gca,'ylim',[-15 25],'ytick',[-15 0 25])
+                box off
+                
+                if SAVE_TABLE
+                    varNames = {'ripple_mean','ripple_sem'};
+                    % data3 = meanTFRRipWeighted;
+                    data2 = stdWeighted/sqrt(nChan);
+                    data1 = avgWeighted;
+                    data_table = table(data1(:),data2(:),'VariableNames',varNames);
+                    outputPubFolder = 'C:\Users\mgeva\Documents\GitHub\closedLoop-pub\figureGen';
+                    if ii_a == 1
+                        save(fullfile(outputPubFolder,'ExtendedDataFig7a_data_table'),'data_table');
+                    elseif ii_a == 2
+                         save(fullfile(outputPubFolder,'ExtendedDataFig7b_data_table'),'data_table');
+
+                    elseif ii_a == 3
+                          save(fullfile(outputPubFolder,'ExtendedDataFig7c_data_table'),'data_table');
+
+                    elseif ii_a == 4
+                           save(fullfile(outputPubFolder,'Fig4a_data_table'),'data_table');
+
+                    end
+                end
+
+
+                outputFigureFolder = 'E:\Dropbox\Nir_Lab\closedLoopRevision\Figures\links_sup_fig7';
+                res =  600;
+                a = gcf;
+                % eval(['print ', [outputFigureFolder,'\',a.Name], ' -f', num2str(a.Number),sprintf(' -dtiff  -r%d',res), '-cmyk' ]); % adding r600 slows down this process significantly!
+            end
+            
+            
+        end % plot func 
+        
+    end % methods
+        
+        
 end
