@@ -7,3 +7,6 @@ See detailed description of methods in RippleDetector_class.docx.
 
 Program requirements:
 Matlab (analyses were done in R2018a)
+
+Interictal spike detections are required to run the ripple detector - see detector under
+https://github.com/mgevasagiv/epilepticActivity_IEEG
