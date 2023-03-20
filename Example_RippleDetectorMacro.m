@@ -4,15 +4,15 @@ data_p_path = 'E:\Data_p\';
 
 patients = {'p1'};
 expNames = {'EXP1'};
-sleepScoreFileName = {'sleepScore_manualValidated_p001_1_LPHG2'};
+sleepScoreFileName = {'sleepScore_p1'};
 
 %channels on which detections will be performed (just an example)
-channelsPerPatient = {[78  1  23  ],... % p1
+channelsPerPatient = {[9 ],... % p1
                       }; 
 
 %for bipolar ripple detection - in every row the first index is the channel in which ripple
 %detection is required and the second is the reference channel
-biPolarCouplesPerPatient = {[78 81;1 4;23 26],... % p1
+biPolarCouplesPerPatient = {[9 12],... % p1
 }; 
 bipolarDet = 0; % determines if uni-polar or bi-polar detection is used
 
@@ -86,7 +86,7 @@ for iPatient = 1:nPatients
 end
 
 
-%% an example for saving ripples using the wrapper AnalyzeCoupling.saveDetectionResults
+%% an example for saving ripples using the wrapper AnalyzeSleepOsc.saveDetectionResults
 as = AnalyzeSleepOsc;
 
 %setting which detections to run - 
