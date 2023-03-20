@@ -128,7 +128,7 @@ classdef AnalyzeSleepOsc < handle
                     
                     if whatToRun.runRipples
                         disp('running ripples');
-                        rd = RippleDetector;
+                        rd = RippleDetector_class;
                         if ~isfield(runData(iPatient),'stimulation_times')
                             runData(iPatient).stimulation_times = [];
                         end

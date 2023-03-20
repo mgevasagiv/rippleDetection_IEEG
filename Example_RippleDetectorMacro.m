@@ -8,13 +8,14 @@ sleepScoreFileName = {'sleepScore_manualValidated_p001_1_LPHG2'};
 
 %channels on which detections will be performed (just an example)
 channelsPerPatient = {[78  1  23  ],... % p1
-    }; 
+                      }; 
 
 %for bipolar ripple detection - in every row the first index is the channel in which ripple
 %detection is required and the second is the reference channel
 biPolarCouplesPerPatient = {[78 81;1 4;23 26],... % p1
 }; 
-                        
+bipolarDet = 0; % determines if uni-polar or bi-polar detection is used
+
 %building the run data, not that for all file names of detections the
 %methods assume the name is <provided name according to runData><channel
 %num>, e.g. if runData(iPatient).SWStaresinaFileName='c:\slow_wave', then
@@ -70,11 +71,11 @@ for iPatient = 1:nPatients
     %channels that the ripples analyses will be performed on
 
     % For ripple detection
-    if DETECTION_RUN
-        runData(iPatient).channelsToRunOn = biPolarCouplesPerPatient{iPatient}(:);   
+    if ~bipolarDet
+        runData(iPatient).channelsToRunOn = biPolarCouplesPerPatient{iPatient}(:,1);   
     else
     % For analysis
-        runData(iPatient).channelsToRunOn = biPolarCouplesPerPatient{iPatient}(:,1);   
+        runData(iPatient).channelsToRunOn = biPolarCouplesPerPatient{iPatient};   
     end
     
     %macromontage file name per patient
@@ -86,21 +87,21 @@ end
 
 
 %% an example for saving ripples using the wrapper AnalyzeCoupling.saveDetectionResults
-ac = AnalyzeSleepOsc;
+as = AnalyzeSleepOsc;
 
 %setting which detections to run - 
-whatToRun.runSpikes = true;
+whatToRun.runSpikes = false;
 whatToRun.runRipples = true;
-whatToRun.runRipplesBiPolar = true;
-whatToRun.runSpindles = true;
-whatToRun.runSpindlesStaresina = true;
-whatToRun.runSWStaresina = true;
-whatToRun.runSWMaingret = true;
-whatToRun.HighFreqSpindles = true;
+whatToRun.runRipplesBiPolar = false;
+whatToRun.runSpindles = false;
+whatToRun.runSpindlesStaresina = false;
+whatToRun.runSWStaresina = false;
+whatToRun.runSWMaingret = false;
+whatToRun.HighFreqSpindles = false;
 
 %saving detections (in this example, bipolar ripples detection)
 parfor ii = 1:length(runData)
-    ac.AnalyzeSleepOsc(runData(ii), whatToRun);
+    as.saveDetectionResults(runData(ii), whatToRun);
 end
 
 %% an example for detecting ripples directly using RippleDetector (it's the same thing the wrapper does inside)
@@ -110,7 +111,7 @@ rd = RippleDetector_class;
 %(on the first channel of the first patient for this example)
 currChan = runData(iPatient).channelsToRunOn(1);
 
-%loading - sleep scoring, IIS, data
+%loading - sleep scoring, IED detection times, data
 sleepScoring = load(runData(1).sleepScoringFileName);
 sleepScoring = sleepScoring.sleep_score_vec;
 peakTimes = load([runData(iPatient).SpikesFileNames,num2str(currChan),'.mat']);
@@ -119,6 +120,7 @@ currData = load([runData(iPatient).DataFolder,'\CSC',num2str(currChan),'.mat']);
 currData = currData.data;
 %detecting the ripples
 [ripplesTimes, ripplesStartEnd] = rd.detectRipple(currData, sleepScoring, peakTimes);
+
 %plotting the single ripples and saving the figures
 rd.plotRipples(currData,ripplesTimes,'D:\singleRipples');
 
