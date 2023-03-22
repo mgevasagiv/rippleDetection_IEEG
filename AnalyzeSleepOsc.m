@@ -145,7 +145,7 @@ classdef AnalyzeSleepOsc < handle
                             disp(['ch',num2str(currChan),'spindle file exists'])
                         else
                             disp('running spindles');
-                            sd = SpindleDetector;
+                            sd = SpindleDetectorClass;
                             
                             isVerified = sd.verifyChannelStep1(currData,sleepScoring,peakTimes);
                             if isVerified
@@ -168,7 +168,7 @@ classdef AnalyzeSleepOsc < handle
                             disp(['ch',num2str(currChan),'spindle file exists'])
                         else
                             disp('running spindles');
-                            sd = SpindleDetector;
+                            sd = SpindleDetectorClass;
                             
                             isVerified = sd.verifyChannelStep1(currData,sleepScoring,peakTimes);
                             if isVerified
@@ -185,21 +185,21 @@ classdef AnalyzeSleepOsc < handle
                      
                     if whatToRun.runSpindlesStaresina
                         disp('running spindles');
-                        sd = SpindleDetector;
+                        sd = SpindleDetectorClass;
                         [spindlesTimes,spindlesStartEndTimes] = sd.detectSpindlesStaresina(currData, sleepScoring, peakTimes);
                         save([runData(iPatient).SpindlesStaresinaFileNames,num2str(currChan),'.mat'],'spindlesTimes','spindlesStartEndTimes');
                     end
                     
                     if whatToRun.runSWStaresina
                         disp('running slow waves staresina');
-                        swd = SlowWavesDetector;
+                        swd = SlowWavesDetectorClass;
                         slowWavesTimes = swd.findSlowWavesStaresina(currData, sleepScoring, peakTimes);
                         save([runData(iPatient).SWStaresinaFileName,num2str(currChan),'.mat'],'slowWavesTimes');
                     end
                     
                     if whatToRun.runSWMaingret
                         disp('running slow waves maingret');
-                        swd = SlowWavesDetector;
+                        swd = SlowWavesDetectorClass;
                         slowWavesTimes = swd.findSlowWavesMaingret(currData, sleepScoring, peakTimes);
                         save([runData(iPatient).SWMaingretFileName,num2str(currChan),'.mat'],'slowWavesTimes');
                     end
@@ -249,7 +249,7 @@ classdef AnalyzeSleepOsc < handle
                             peakTimesRef = [];
                         end
                         
-                        rd = RippleDetector;
+                        rd = RippleDetector_class;
                         rd.samplingRate = obj.samplingRate;
                         %run detection on data-reference
                         [ripplesTimes, ripplesStartEnd] = rd.detectRipple(currData-currRef, sleepScoring, [peakTimesChan peakTimesRef]);
