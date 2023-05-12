@@ -7,7 +7,7 @@
 data_p_path = 'C:\Users\mgeva\Documents\GitHub\rippleDetection_IEEG\example\';
 
 % the code assumes extracted data will be found under
-% runData(iPatient).DataFolder = [data_p_path,patients{iPatient},'\',expNames{iPatient},'\MACRO'];
+% runData(iPatient).DataFolder = [data_p_path,patients{iPatient},'\',expNames{iPatient},'\MACRO','CSCX.mat'];
 outputFigureFolder = fullfile(data_p_path,'Figures');
 
 % subject name
